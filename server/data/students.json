@@ -1,0 +1,143 @@
+[
+  {
+    "student_id": "S101",
+    "name": "Rahul Sharma",
+    "bus_no": 4,
+    "seat": 11,
+    "present": true,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S102",
+    "name": "Priya Singh",
+    "bus_no": 1,
+    "seat": 2,
+    "present": true
+  },
+  {
+    "student_id": "S103",
+    "name": "Aryan Joshi",
+    "bus_no": 1,
+    "seat": 3,
+    "present": true
+  },
+  {
+    "student_id": "S104",
+    "name": "Neha Rawat",
+    "bus_no": 1,
+    "seat": 4,
+    "present": true
+  },
+  {
+    "student_id": "S105",
+    "name": "Vikram Thakur",
+    "bus_no": 1,
+    "seat": 5,
+    "present": true
+  },
+  {
+    "student_id": "S106",
+    "name": "Anjali Bisht",
+    "bus_no": 1,
+    "seat": 6,
+    "present": false
+  },
+  {
+    "student_id": "S107",
+    "name": "Rohan Pandey",
+    "bus_no": 1,
+    "seat": 7,
+    "present": false
+  },
+  {
+    "student_id": "S108",
+    "name": "Shivani Verma",
+    "bus_no": 1,
+    "seat": 8,
+    "present": false
+  },
+  {
+    "student_id": "S109",
+    "name": "Karan Mehta",
+    "bus_no": 1,
+    "seat": 9,
+    "present": false
+  },
+  {
+    "student_id": "S110",
+    "name": "Divya Nautiyal",
+    "bus_no": 1,
+    "seat": 10,
+    "present": false
+  },
+  {
+    "student_id": "S201",
+    "name": "Arjun Kumar",
+    "bus_no": 4,
+    "seat": 1,
+    "present": false
+  },
+  {
+    "student_id": "S202",
+    "name": "Sakshi Joshi",
+    "bus_no": 4,
+    "seat": 2,
+    "present": false
+  },
+  {
+    "student_id": "S203",
+    "name": "Rohit Bisht",
+    "bus_no": 4,
+    "seat": 3,
+    "present": false
+  },
+  {
+    "student_id": "S204",
+    "name": "Pooja Rawat",
+    "bus_no": 4,
+    "seat": 4,
+    "present": false
+  },
+  {
+    "student_id": "S205",
+    "name": "Mayank Singh",
+    "bus_no": 4,
+    "seat": 5,
+    "present": false
+  },
+  {
+    "student_id": "S206",
+    "name": "Tanya Sharma",
+    "bus_no": 4,
+    "seat": 6,
+    "present": false
+  },
+  {
+    "student_id": "S207",
+    "name": "Aditya Thakur",
+    "bus_no": 4,
+    "seat": 7,
+    "present": false
+  },
+  {
+    "student_id": "S208",
+    "name": "Riya Pant",
+    "bus_no": 4,
+    "seat": 8,
+    "present": false
+  },
+  {
+    "student_id": "S209",
+    "name": "Harshit Negi",
+    "bus_no": 4,
+    "seat": 9,
+    "present": false
+  },
+  {
+    "student_id": "S210",
+    "name": "Muskan Gupta",
+    "bus_no": 4,
+    "seat": 10,
+    "present": false
+  }
+]

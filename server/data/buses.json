@@ -1,0 +1,84 @@
+[
+  {
+    "bus_no": 1,
+    "vehicle_no": "UK04PA 1617",
+    "driver": "CHANDAN AGNIHOTRI",
+    "route": "Chharayal Gas Godam Road",
+    "time": "2:30 PM",
+    "capacity": 36,
+    "conductor_id": "C001"
+  },
+  {
+    "bus_no": 4,
+    "vehicle_no": "UK04PA 2167",
+    "driver": "PURAN PANDEY",
+    "route": "Kamaluwaganja",
+    "time": "2:30 PM",
+    "capacity": 36,
+    "conductor_id": "C004"
+  },
+  {
+    "bus_no": 11,
+    "vehicle_no": "UK04PA 0742",
+    "driver": "HARISH LOHANI",
+    "route": "Mainital Road",
+    "time": "3:30 PM",
+    "capacity": 36
+  },
+  {
+    "bus_no": 15,
+    "vehicle_no": "UK04PA 1614",
+    "driver": "BHUWAN PANDEY",
+    "route": "Judge Farm Mukhani Road",
+    "time": "2:30 PM",
+    "capacity": 36
+  },
+  {
+    "bus_no": 21,
+    "vehicle_no": "UK04PA 1550",
+    "driver": "SUNIL ARYA",
+    "route": "Bhagwanpur Road",
+    "time": "2:30 PM",
+    "capacity": 36
+  },
+  {
+    "bus_no": 25,
+    "vehicle_no": "UK04PA 0911",
+    "driver": "DAYA KISHAN PALARIYA",
+    "route": "Nakuchiyatal",
+    "time": "3:30 PM",
+    "capacity": 36
+  },
+  {
+    "bus_no": 28,
+    "vehicle_no": "UK04PA 1865",
+    "driver": "KAILASH PALARIYA",
+    "route": "Laldanth Road",
+    "time": "2:30 PM",
+    "capacity": 36
+  },
+  {
+    "bus_no": 32,
+    "vehicle_no": "UK04PA 1870",
+    "driver": "RAMESH JOSHI",
+    "route": "Bhagwanpur Road",
+    "time": "2:30 PM",
+    "capacity": 36
+  },
+  {
+    "bus_no": 41,
+    "vehicle_no": "UK04PA 2017",
+    "driver": "YOGESH KUMAR",
+    "route": "Lamachaur Road",
+    "time": "2:30 PM",
+    "capacity": 36
+  },
+  {
+    "bus_no": 50,
+    "vehicle_no": "UK04PA 2150",
+    "driver": "MANOHAR SINGH",
+    "route": "RTO Road",
+    "time": "2:30 PM",
+    "capacity": 36
+  }
+]

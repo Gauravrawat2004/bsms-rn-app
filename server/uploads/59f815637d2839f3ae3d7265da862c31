@@ -1,0 +1,21 @@
+student_id,name,course,year,route,fee_paid
+S101,Rahul Sharma,BTech,2,Chharayal Gas Godam Road,Yes
+S102,Priya Singh,BCA,3,Chharayal Gas Godam Road,Yes
+S103,Aryan Joshi,MCA,1,Chharayal Gas Godam Road,Yes
+S104,Neha Rawat,BTech,4,Chharayal Gas Godam Road,Yes
+S105,Vikram Thakur,BBA,2,Chharayal Gas Godam Road,Yes
+S106,Anjali Bisht,MBA,1,Chharayal Gas Godam Road,Yes
+S107,Rohan Pandey,BTech,3,Chharayal Gas Godam Road,Yes
+S108,Shivani Verma,BCA,2,Chharayal Gas Godam Road,Yes
+S109,Karan Mehta,MCA,2,Chharayal Gas Godam Road,Yes
+S110,Divya Nautiyal,BTech,1,Chharayal Gas Godam Road,Yes
+S201,Arjun Kumar,BTech,2,Kamaluwaganja,Yes
+S202,Sakshi Joshi,BCA,3,Kamaluwaganja,Yes
+S203,Rohit Bisht,MCA,1,Kamaluwaganja,Yes
+S204,Pooja Rawat,BBA,2,Kamaluwaganja,Yes
+S205,Mayank Singh,MBA,1,Kamaluwaganja,Yes
+S206,Tanya Sharma,BTech,4,Kamaluwaganja,Yes
+S207,Aditya Thakur,BCA,2,Kamaluwaganja,Yes
+S208,Riya Pant,MCA,3,Kamaluwaganja,Yes
+S209,Harshit Negi,BTech,1,Kamaluwaganja,Yes
+S210,Muskan Gupta,BBA,2,Kamaluwaganja,Yes

@@ -1,76 +1,138 @@
+
+// app/student.tsx
 import { useLocalSearchParams } from 'expo-router';
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, Card, Chip, Text } from 'react-native-paper';
 
-// Interface banao
-interface RouteParams extends Record<string, string | string[] | undefined> {
-  id?: string;
-}
+type Student = {
+  student_id: string;
+  name: string;
+  bus_no: number | null;
+  seat: number | null;
+  present: boolean;
+  fee_paid: boolean;
+  route?: string;
+  course?: string | null;
+  year?: number | null;
+};
 
-export default function StudentDashboard() {
-  // Use type assertion for the returned params
-  const { id } = useLocalSearchParams() as RouteParams;
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://192.168.1.100:3001';
+
+export default function StudentScreen() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const studentId = useMemo(() => id ?? '', [id]);
+
+  const [student, setStudent] = useState<Student | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  async function fetchStudent() {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/api/student/${encodeURIComponent(studentId)}`);
+      const data = await res.json();
+      setStudent(data);
+    } catch (e) {
+      console.warn('Failed to fetch student:', e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (studentId) fetchStudent();
+  }, [studentId]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchStudent();
+    setRefreshing(false);
+  };
+
+  if (!studentId) {
+    return (
+      <View style={styles.centered}>
+        <Text>Please navigate with a valid Student ID.</Text>
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator />
+        <Text style={{ marginTop: 8 }}>Loading student details…</Text>
+      </View>
+    );
+  }
+
+  if (!student) {
+    return (
+      <View style={styles.centered}>
+        <Text>Student not found for ID: {studentId}</Text>
+        <Button mode="contained" onPress={fetchStudent} style={{ marginTop: 12 }}>
+          Retry
+        </Button>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome Student!</Text>
-      <Text style={styles.id}>ID: {id || 'N/A'}</Text>
-      <View style={styles.card}>
-        <Text style={styles.label}>Bus</Text>
-        <Text style={styles.value}>Route 1 - Bus 1 (36 seater)</Text>
-      </View>
-      <View style={styles.card}>
-        <Text style={styles.label}>Seat</Text>
-        <Text style={styles.value}>35</Text>
-      </View>
-      <View style={styles.card}>
-        <Text style={styles.label}>Next Stop</Text>
-        <Text style={styles.value}>7:15 AM</Text>
-      </View>
-    </View>
+    <ScrollView
+      contentContainerStyle={{ padding: 16 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text variant="headlineSmall" style={styles.title}>
+            Student Dashboard
+          </Text>
+          <Text variant="titleMedium">{student.name}</Text>
+          <Text>ID: {student.student_id}</Text>
+          {student.course ? <Text>Course: {student.course}</Text> : null}
+          {student.year ? <Text>Year: {student.year}</Text> : null}
+
+          <View style={styles.chips}>
+            <Chip icon="bus" style={styles.chip}>Bus: {student.bus_no ?? 'N/A'}</Chip>
+            <Chip icon="seat" style={styles.chip}>Seat: {student.seat ?? 'N/A'}</Chip>
+            <Chip icon="map-marker" style={styles.chip}>Route: {student.route ?? 'N/A'}</Chip>
+          </View>
+
+          <View style={styles.statusRow}>
+            <Chip
+              icon={student.present ? 'check-circle' : 'close-circle'}
+              mode="flat"
+              style={styles.statusChip}
+            >
+              {student.present ? 'Present' : 'Absent'}
+            </Chip>
+            <Chip
+              icon={student.fee_paid ? 'cash-check' : 'cash-remove'}
+              mode="flat"
+              style={styles.statusChip}
+            >
+              {student.fee_paid ? 'Fee Paid' : 'Fee Due'}
+            </Chip>
+          </View>
+
+          {/* Read-only: students cannot mark attendance themselves */}
+          <View style={styles.actions}>
+            <Button mode="outlined" onPress={onRefresh}>Refresh</Button>
+          </View>
+        </Card.Content>
+      </Card>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    padding: 20, 
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center'
-  },
-  title: { 
-    fontSize: 26, 
-    fontWeight: 'bold', 
-    color: '#1e40af', 
-    textAlign: 'center', 
-    marginBottom: 24 
-  },
-  id: { 
-    fontSize: 18, 
-    textAlign: 'center', 
-    marginBottom: 24, 
-    color: '#475569' 
-  },
-  card: { 
-    backgroundColor: '#fff', 
-    padding: 16, 
-    borderRadius: 14, 
-    marginVertical: 8, 
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  label: { 
-    fontSize: 14, 
-    color: '#64748b', 
-    fontWeight: '600' 
-  },
-  value: { 
-    fontSize: 18, 
-    color: '#1e293b', 
-    marginTop: 4, 
-    fontWeight: '500' 
-  },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  card: { borderRadius: 16 },
+  title: { marginBottom: 6 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 },
+  chip: { borderRadius: 12 },
+  statusRow: { flexDirection: 'row', gap: 10, marginVertical: 12 },
+  statusChip: { borderRadius: 10 },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' },
 });
