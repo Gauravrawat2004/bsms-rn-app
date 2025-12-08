@@ -1,0 +1,12 @@
+
+# Ignore heavy/build/volatile dirs
+node_modules/
+dist/
+build/
+android/.gradle/
+android/build/
+ios/build/
+uploads/
+data/
+.expo/
+.DS_Store
