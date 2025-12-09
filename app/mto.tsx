@@ -43,8 +43,30 @@ export default function MTOHub() {
             Upload Bus & Student CSV to update assignments and seats.
           </Text>
         </TouchableOpacity>
+        
+
+<TouchableOpacity style={styles.card} onPress={() => router.push('/mto/staff' as any)}>
+  <View style={styles.cardIconRow}>
+    <Ionicons name="swap-horizontal-outline" size={28} color="#0a67d3" />
+    <Text style={styles.cardTitle}>Replace Staff</Text>
+  </View>
+  <Text style={styles.cardDesc}>Replace driver or conductor for any bus.</Text>
+</TouchableOpacity>
+
+<TouchableOpacity style={styles.card} onPress={() => router.push('/mto/adjust' as any)}>
+  <View style={styles.cardIconRow}>
+    <Ionicons name="shuffle-outline" size={28} color="#4f46e5" />
+    <Text style={styles.cardTitle}>Adjust Buses (Off-Day)</Text>
+  </View>
+  <Text style={styles.cardDesc}>Consolidate buses on same route when some courses/years are off.</Text>
+</TouchableOpacity>
+
       </View>
     </SafeAreaView>
+    
+
+
+
   );
 }
 
@@ -75,3 +97,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
   cardDesc: { fontSize: 13, color: '#6b7280' },
 });
+
+
+
+
