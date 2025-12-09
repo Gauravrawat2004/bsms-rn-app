@@ -15,7 +15,7 @@ type Faculty = {
   assigned_bus?: number | null;
 };
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://192.168.1.100:3001';
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://192.168.1.101:3001';
 
 export default function FacultyScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();

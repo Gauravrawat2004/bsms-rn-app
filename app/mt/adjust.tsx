@@ -3,10 +3,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
+  Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? 'http://localhost:3001';
+const API_BASE = "http://192.168.1.101:3001";
 
 type BusRow = { bus_no: number; route: string; capacity?: number };
 type Plan = { route: string; keep_bus_no: number; suspend_bus_nos: number[]; moved: Array<{ student_id: string; to_bus_no: number; seat: number }>; overflow: Array<{ student_id: string }> };
@@ -26,7 +26,7 @@ export default function AdjustOffDay() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/buses`);
+        const r = await fetch(`${API_BASE}/buses`);
         const j = await r.json();
         setBuses(j);
         setRoutes(uniqueRoutes);
@@ -58,7 +58,7 @@ export default function AdjustOffDay() {
     };
 
     try {
-      const r = await fetch(`${API_BASE}/api/mto/adjust-offday`, {
+      const r = await fetch(`${API_BASE}/adjust-offday`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

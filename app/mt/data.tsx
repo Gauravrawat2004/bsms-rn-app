@@ -1,77 +1,70 @@
-
 // app/mto/data.tsx
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? 'http://localhost:3001';
+const API_BASE = "http://192.168.1.101:3001";
 
 export default function DataCsv() {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
 
   const uploadCsvTo = async (endpoint: '/upload/bus' | '/upload/student') => {
-    try {
-      const pick = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-      if (pick.canceled || !pick.assets?.length) return;
+      try {
+    const pick = await DocumentPicker.getDocumentAsync({
+      type: "text/csv",
+      copyToCacheDirectory: true,
+    });
 
-      const file = pick.assets[0];
-      if (!file.name?.toLowerCase().endsWith('.csv')) {
-        Alert.alert('Invalid file', 'Please select a CSV file.');
-        return;
-      }
+    if (pick.canceled || !pick?.assets?.length) return;
 
-      setUploading(true);
+    const file = pick.assets[0];
 
-      const form = new FormData();
-      form.append('file', {
-        uri: file.uri,
-        name: file.name || 'upload.csv',
-        type: 'text/csv',
-      } as any);
+    const form = new FormData();
+    form.append("file", {
+      uri: file.uri,
+      name: file.name || "upload.csv",
+      type: "text/csv",  // ← FIXES BOUNDARY ISSUE
+    } as any);
 
-      const resp = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', body: form });
-      const json = await resp.json();
-      if (!resp.ok) throw new Error(json?.error || `Upload failed: ${resp.status}`);
+    // 🔥 IMPORTANT: DO NOT SET HEADERS
+    const resp = await fetch(`${API_BASE}${endpoint}`, {
+      method: "POST",
+      body: form,
+    });
 
-      Alert.alert(
-        'CSV Uploaded',
-        endpoint === '/upload/bus'
-          ? `Bus CSV processed. ${json?.count ?? 0} buses updated.`
-          : `Student CSV processed. ${json?.added ?? 0} new student(s) added.`
-      );
-    } catch (e: any) {
-      Alert.alert('Upload error', e?.message ?? 'Failed to upload CSV.');
-    } finally {
-      setUploading(false);
-    }
+    const json = await resp.json();
+
+    Alert.alert("Success", "CSV uploaded successfully!");
+  } catch (e: any) {
+    console.log(e);
+    Alert.alert("Upload failed", e?.message || "Network request failed");
+  }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Data / CSV" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.content}>
+        
+        {/* BUS CSV UPLOAD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="cloud-upload-outline" size={20} color="#1f2937" />
               <Text style={styles.cardTitle}>Upload Bus CSV</Text>
             </View>
-            <Text style={styles.cardHint}>Fields: bus_no, vehicle_no, driver, route, capacity…</Text>
+            <Text style={styles.cardHint}>Format: bus_no, vehicle_no, driver, route, capacity…</Text>
           </View>
 
           <TouchableOpacity
@@ -84,13 +77,14 @@ export default function DataCsv() {
           </TouchableOpacity>
         </View>
 
+        {/* STUDENT CSV UPLOAD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="people-outline" size={20} color="#1f2937" />
               <Text style={styles.cardTitle}>Upload Student CSV</Text>
             </View>
-            <Text style={styles.cardHint}>Fields: student_id, name, course, year, route, fee_paid…</Text>
+            <Text style={styles.cardHint}>Format: student_id, name, course, year, route, fee_paid…</Text>
           </View>
 
           <TouchableOpacity
@@ -104,6 +98,7 @@ export default function DataCsv() {
             </Text>
           </TouchableOpacity>
         </View>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -118,7 +113,7 @@ function Header({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
-/* ---- Lighter, standard styles ---- */
+/* ---- Styles ---- */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f7f7fb' },
   content: { padding: 16, paddingBottom: 24 },

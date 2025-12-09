@@ -12,7 +12,7 @@
     "name": "Priya Singh",
     "bus_no": 1,
     "seat": 2,
-    "present": true
+    "present": false
   },
   {
     "student_id": "S103",
@@ -40,28 +40,28 @@
     "name": "Anjali Bisht",
     "bus_no": 1,
     "seat": 6,
-    "present": false
+    "present": true
   },
   {
     "student_id": "S107",
     "name": "Rohan Pandey",
     "bus_no": 1,
     "seat": 7,
-    "present": false
+    "present": true
   },
   {
     "student_id": "S108",
     "name": "Shivani Verma",
     "bus_no": 1,
     "seat": 8,
-    "present": false
+    "present": true
   },
   {
     "student_id": "S109",
     "name": "Karan Mehta",
     "bus_no": 1,
     "seat": 9,
-    "present": false
+    "present": true
   },
   {
     "student_id": "S110",
@@ -75,35 +75,35 @@
     "name": "Arjun Kumar",
     "bus_no": 4,
     "seat": 1,
-    "present": false
+    "present": true
   },
   {
     "student_id": "S202",
     "name": "Sakshi Joshi",
     "bus_no": 4,
     "seat": 2,
-    "present": false
+    "present": true
   },
   {
     "student_id": "S203",
     "name": "Rohit Bisht",
     "bus_no": 4,
     "seat": 3,
-    "present": false
+    "present": true
   },
   {
     "student_id": "S204",
     "name": "Pooja Rawat",
     "bus_no": 4,
     "seat": 4,
-    "present": false
+    "present": true
   },
   {
     "student_id": "S205",
     "name": "Mayank Singh",
     "bus_no": 4,
     "seat": 5,
-    "present": false
+    "present": true
   },
   {
     "student_id": "S206",

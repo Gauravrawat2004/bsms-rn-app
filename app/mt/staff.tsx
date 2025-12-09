@@ -3,10 +3,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
+  Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? 'http://localhost:3001';
+const API_BASE = "http://192.168.1.101:3001";
 
 type BusRow = { bus_no: number; route: string; driver?: string; driver_contact?: string; conductor_id?: string; capacity?: number; };
 

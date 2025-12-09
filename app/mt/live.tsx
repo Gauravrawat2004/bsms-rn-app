@@ -4,16 +4,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? 'http://localhost:3001';
+const API_BASE = "http://192.168.1.101:3001";
 
 type SummaryItem = {
   bus_no: number;
@@ -31,7 +31,7 @@ export default function LiveStatus() {
   const fetchSummary = async () => {
     setLoading(true);
     try {
-      const resp = await fetch(`${API_BASE}/api/incharge/summary`);
+      const resp = await fetch(`${API_BASE}/summary`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json: SummaryItem[] = await resp.json();
       setFleet(json);
