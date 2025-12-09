@@ -3,82 +3,120 @@
     "bus_no": 1,
     "vehicle_no": "UK04PA 1617",
     "driver": "CHANDAN AGNIHOTRI",
+    "driver_contact": "9568616893",
+    "helper": "YOGESH KUMAR",
+    "helper_contact": "8279656486",
     "route": "Chharayal Gas Godam Road",
     "time": "2:30 PM",
     "capacity": 36,
-    "conductor_id": "C001"
+    "conductor_id": null
   },
   {
     "bus_no": 4,
     "vehicle_no": "UK04PA 2167",
     "driver": "PURAN PANDEY",
+    "driver_contact": "9528886956",
+    "helper": "KAMAL KUMAR",
+    "helper_contact": "7817856387",
     "route": "Kamaluwaganja",
     "time": "2:30 PM",
     "capacity": 36,
-    "conductor_id": "C004"
+    "conductor_id": null
   },
   {
     "bus_no": 11,
     "vehicle_no": "UK04PA 0742",
     "driver": "HARISH LOHANI",
+    "driver_contact": "7302702191",
+    "helper": "MOHIT VERMA",
+    "helper_contact": "9058038577",
     "route": "Mainital Road",
     "time": "3:30 PM",
-    "capacity": 36
+    "capacity": 30,
+    "conductor_id": null
   },
   {
     "bus_no": 15,
     "vehicle_no": "UK04PA 1614",
     "driver": "BHUWAN PANDEY",
+    "driver_contact": "9012846626",
+    "helper": "DEEPAK AGNIHOTRI",
+    "helper_contact": "9760536944",
     "route": "Judge Farm Mukhani Road",
     "time": "2:30 PM",
-    "capacity": 36
+    "capacity": 28,
+    "conductor_id": null
   },
   {
     "bus_no": 21,
     "vehicle_no": "UK04PA 1550",
     "driver": "SUNIL ARYA",
+    "driver_contact": "7533901070",
+    "helper": "DIGAMBAR LAL",
+    "helper_contact": "9368539271",
     "route": "Bhagwanpur Road",
     "time": "2:30 PM",
-    "capacity": 36
+    "capacity": 36,
+    "conductor_id": null
   },
   {
     "bus_no": 25,
     "vehicle_no": "UK04PA 0911",
     "driver": "DAYA KISHAN PALARIYA",
+    "driver_contact": "9718787874",
+    "helper": "BHUWAN CHANDRA",
+    "helper_contact": "9997124558",
     "route": "Nakuchiyatal",
     "time": "3:30 PM",
-    "capacity": 36
+    "capacity": 36,
+    "conductor_id": null
   },
   {
     "bus_no": 28,
     "vehicle_no": "UK04PA 1865",
     "driver": "KAILASH PALARIYA",
+    "driver_contact": "7817034916",
+    "helper": "MUNENDRA RAWAT",
+    "helper_contact": "9412951044",
     "route": "Laldanth Road",
     "time": "2:30 PM",
-    "capacity": 36
+    "capacity": 36,
+    "conductor_id": null
   },
   {
     "bus_no": 32,
     "vehicle_no": "UK04PA 1870",
     "driver": "RAMESH JOSHI",
+    "driver_contact": "7017155192",
+    "helper": "DALIP SINGH",
+    "helper_contact": "9411773615",
     "route": "Bhagwanpur Road",
     "time": "2:30 PM",
-    "capacity": 36
+    "capacity": 36,
+    "conductor_id": null
   },
   {
     "bus_no": 41,
     "vehicle_no": "UK04PA 2017",
     "driver": "YOGESH KUMAR",
+    "driver_contact": "9012598127",
+    "helper": "VIJAY PALARIYA",
+    "helper_contact": null,
     "route": "Lamachaur Road",
     "time": "2:30 PM",
-    "capacity": 36
+    "capacity": 36,
+    "conductor_id": null
   },
   {
     "bus_no": 50,
     "vehicle_no": "UK04PA 2150",
     "driver": "MANOHAR SINGH",
+    "driver_contact": "9756167681",
+    "helper": "HAR SINGH",
+    "helper_contact": "9105336128",
     "route": "RTO Road",
     "time": "2:30 PM",
-    "capacity": 36
+    "capacity": 36,
+    "conductor_id": null
   }
 ]
