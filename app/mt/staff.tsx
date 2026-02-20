@@ -6,7 +6,7 @@ import {
   Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 
-const API_BASE = "http://192.168.1.101:3001";
+const API_BASE = "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
 
 type BusRow = { bus_no: number; route: string; driver?: string; driver_contact?: string; conductor_id?: string; capacity?: number; };
 

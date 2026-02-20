@@ -197,10 +197,27 @@ app.post('/upload/_debug', upload.single('file'), (req, res) => {
 // (B) Upload Bus CSV
 app.post('/upload/bus', upload.single('file'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No bus CSV file received (field "file")' });
+    console.log('=== Bus CSV Upload Request ===');
+    console.log('Headers:', req.headers);
+    console.log('File received:', !!req.file);
+    console.log('File details:', req.file ? {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      encoding: req.file.encoding,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    } : 'NO FILE');
+
+    if (!req.file) {
+      console.error('No file in request');
+      return res.status(400).json({ error: 'No bus CSV file received (field "file")' });
+    }
 
     const rows = parseCsvBufferToRows(req.file.buffer);
+    console.log(`Parsed ${rows.length} rows from CSV`);
+    
     const buses = rows.map(mapBusRow).filter((b) => Number.isInteger(b.bus_no) && b.route);
+    console.log(`Mapped to ${buses.length} valid buses`);
 
     writeJson(BUSES_FILE, buses);
 
@@ -209,18 +226,32 @@ app.post('/upload/bus', upload.single('file'), async (req, res) => {
       if (error) console.error('Supabase buses error:', error);
     }
 
+    console.log('Bus upload SUCCESS');
     return res.json({ message: 'Buses uploaded successfully!', count: buses.length });
   } catch (err) {
     console.error('BUS upload error:', err);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
 // (C) Upload Student CSV
 app.post('/upload/student', upload.single('file'), async (req, res) => {
   try {
-    if (!req.file)
+    console.log('=== Student CSV Upload Request ===');
+    console.log('Headers:', req.headers);
+    console.log('File received:', !!req.file);
+    console.log('File details:', req.file ? {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      encoding: req.file.encoding,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    } : 'NO FILE');
+
+    if (!req.file) {
+      console.error('No file in request');
       return res.status(400).json({ error: 'No student CSV file received (field "file")' });
+    }
 
     const buses = readJson(BUSES_FILE);
     const existing = readJson(STUDENTS_FILE);
@@ -235,12 +266,15 @@ app.post('/upload/student', upload.single('file'), async (req, res) => {
 
     const existingById = new Map(existing.map((s) => [s.student_id, true]));
     const rows = parseCsvBufferToRows(req.file.buffer);
+    console.log(`Parsed ${rows.length} rows from CSV`);
 
     const newStudents = [];
     for (const row of rows) {
       const mapped = mapStudentRow(row, buses, existingById, seatsByBus);
       if (mapped) newStudents.push(mapped);
     }
+    
+    console.log(`Mapped to ${newStudents.length} new valid students`);
 
     const allStudents = [...existing, ...newStudents];
     writeJson(STUDENTS_FILE, allStudents);
@@ -252,10 +286,11 @@ app.post('/upload/student', upload.single('file'), async (req, res) => {
       if (error) console.error('Supabase students error:', error);
     }
 
+    console.log('Student upload SUCCESS');
     return res.json({ message: 'Students uploaded!', added: newStudents.length });
   } catch (err) {
     console.error('STUDENT upload error:', err);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 

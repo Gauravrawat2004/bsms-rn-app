@@ -1,9 +1,17 @@
 
-// app/conductor.tsx
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Card, Chip, Divider, Switch, Text, TextInput } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Button,
+  Card,
+  Chip,
+  Divider,
+  Switch,
+  Text,
+  TextInput,
+} from 'react-native-paper';
 
 type Student = {
   student_id: string;
@@ -14,13 +22,26 @@ type Student = {
   is_temp?: boolean;
 };
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://192.168.1.101:3001';
+type BusInfo = {
+  bus_no: number;
+  route: string;
+  driver?: string;
+  driver_contact?: string;
+  helper?: string;
+  helper_contact?: string;
+  conductor_id?: string;
+  vehicle_no?: string;
+  capacity?: number;
+};
+
+const API_BASE = 'https://antonetta-historiographical-vernacularly.ngrok-free.dev';
 
 export default function ConductorScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const conductorId = useMemo(() => id ?? '', [id]);
 
   const [busNo, setBusNo] = useState<number | null>(null);
+  const [busInfo, setBusInfo] = useState<BusInfo | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -51,9 +72,18 @@ export default function ConductorScreen() {
     if (!bus) return;
     try {
       setLoading(true);
+      // Fetch students
       const res = await fetch(`${API_BASE}/api/students?bus_no=${bus}`);
       const data = await res.json();
       setStudents(data);
+      
+      // Fetch bus info to get conductor and helper details
+      const busRes = await fetch(`${API_BASE}/api/buses`);
+      const busData = await busRes.json();
+      const currentBus = busData.find((b: BusInfo) => b.bus_no === bus);
+      if (currentBus) {
+        setBusInfo(currentBus);
+      }
     } catch (e) {
       console.warn('Failed to load students:', e);
     } finally {
@@ -163,6 +193,49 @@ export default function ConductorScreen() {
           <Text variant="headlineSmall" style={styles.title}>
             Conductor — Bus {busNo}
           </Text>
+          
+          {/* Display Bus, Conductor and Helper Info */}
+          {busInfo && (
+            <View style={styles.infoSection}>
+              {busInfo.route && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Route:</Text>
+                  <Text style={styles.infoValue}>{busInfo.route}</Text>
+                </View>
+              )}
+              {busInfo.vehicle_no && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Vehicle:</Text>
+                  <Text style={styles.infoValue}>{busInfo.vehicle_no}</Text>
+                </View>
+              )}
+              {busInfo.driver && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Driver:</Text>
+                  <Text style={styles.infoValue}>
+                    {busInfo.driver}
+                    {busInfo.driver_contact ? ` (${busInfo.driver_contact})` : ''}
+                  </Text>
+                </View>
+              )}
+              {busInfo.helper && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Helper:</Text>
+                  <Text style={styles.infoValue}>
+                    {busInfo.helper}
+                    {busInfo.helper_contact ? ` (${busInfo.helper_contact})` : ''}
+                  </Text>
+                </View>
+              )}
+              {busInfo.conductor_id && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Conductor ID:</Text>
+                  <Text style={styles.infoValue}>{busInfo.conductor_id}</Text>
+                </View>
+              )}
+            </View>
+          )}
+          
           <Divider style={{ marginVertical: 12 }} />
 
           {/* Add passenger (ticket/permanent) */}
@@ -263,4 +336,8 @@ const styles = StyleSheet.create({
   statusChip: { borderRadius: 10 },
   addRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   addRow2: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 8, justifyContent: 'space-between' },
+  infoSection: { marginTop: 8, gap: 6 },
+  infoRow: { flexDirection: 'row', alignItems: 'center' },
+  infoLabel: { fontWeight: '600', width: 100, color: '#555' },
+  infoValue: { flex: 1, color: '#333' },
 });

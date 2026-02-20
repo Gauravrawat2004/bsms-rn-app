@@ -1,5 +1,6 @@
 
 // app/mto/live.tsx
+
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -13,7 +14,7 @@ import {
   View,
 } from 'react-native';
 
-const API_BASE = "http://192.168.1.101:3001";
+const API_BASE = "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
 
 type SummaryItem = {
   bus_no: number;

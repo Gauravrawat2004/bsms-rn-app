@@ -10,61 +10,87 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
-const API_BASE = "http://192.168.1.101:3001";
+const API_BASE =  "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
 
 export default function DataCsv() {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
 
   const uploadCsvTo = async (endpoint: '/upload/bus' | '/upload/student') => {
-      try {
-    const pick = await DocumentPicker.getDocumentAsync({
-      type: "text/csv",
-      copyToCacheDirectory: true,
-    });
+    try {
+      const pick = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'application/csv'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (pick.canceled || !pick.assets?.length) return;
 
-    if (pick.canceled || !pick?.assets?.length) return;
+      const file = pick.assets[0];
+      if (!file.name?.toLowerCase().endsWith('.csv')) {
+        Alert.alert('Invalid file', 'Please select a CSV file.');
+        return;
+      }
 
-    const file = pick.assets[0];
+      setUploading(true);
 
-    const form = new FormData();
-    form.append("file", {
-      uri: file.uri,
-      name: file.name || "upload.csv",
-      type: "text/csv",  // ← FIXES BOUNDARY ISSUE
-    } as any);
+      // Create FormData with proper React Native file structure
+      const form = new FormData();
+      
+      // React Native FormData requires this specific structure
+      const fileToUpload = {
+        uri: file.uri,
+        name: file.name || 'upload.csv',
+        type: file.mimeType || 'text/csv',
+      };
 
-    // 🔥 IMPORTANT: DO NOT SET HEADERS
-    const resp = await fetch(`${API_BASE}${endpoint}`, {
-      method: "POST",
-      body: form,
-    });
+      console.log('Uploading file:', fileToUpload);
+      form.append('file', fileToUpload as any);
 
-    const json = await resp.json();
+      // Important: Do NOT set Content-Type header manually for FormData
+      // React Native will auto-set it to multipart/form-data with boundary
+      const resp = await fetch(`${API_BASE}${endpoint}`, { 
+        method: 'POST', 
+        body: form,
+        // Let browser/RN auto-set headers for multipart
+      });
+      
+      const json = await resp.json();
+      
+      if (!resp.ok) {
+        console.error('Upload failed:', json);
+        throw new Error(json?.error || `Upload failed: ${resp.status}`);
+      }
 
-    Alert.alert("Success", "CSV uploaded successfully!");
-  } catch (e: any) {
-    console.log(e);
-    Alert.alert("Upload failed", e?.message || "Network request failed");
-  }
+      console.log('Upload success:', json);
+      
+      Alert.alert(
+        'CSV Uploaded',
+        endpoint === '/upload/bus'
+          ? `Bus CSV processed. ${json?.count ?? 0} buses updated.`
+          : `Student CSV processed. ${json?.added ?? 0} new student(s) added.`
+      );
+    } catch (e: any) {
+      console.error('Upload error:', e);
+      Alert.alert('Upload error', e?.message ?? 'Failed to upload CSV.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Data / CSV" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.content}>
-        
-        {/* BUS CSV UPLOAD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="cloud-upload-outline" size={20} color="#1f2937" />
               <Text style={styles.cardTitle}>Upload Bus CSV</Text>
             </View>
-            <Text style={styles.cardHint}>Format: bus_no, vehicle_no, driver, route, capacity…</Text>
+            <Text style={styles.cardHint}>Fields: bus_no, vehicle_no, driver, route, capacity…</Text>
           </View>
 
           <TouchableOpacity
@@ -77,14 +103,13 @@ export default function DataCsv() {
           </TouchableOpacity>
         </View>
 
-        {/* STUDENT CSV UPLOAD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="people-outline" size={20} color="#1f2937" />
               <Text style={styles.cardTitle}>Upload Student CSV</Text>
             </View>
-            <Text style={styles.cardHint}>Format: student_id, name, course, year, route, fee_paid…</Text>
+            <Text style={styles.cardHint}>Fields: student_id, name, course, year, route, fee_paid…</Text>
           </View>
 
           <TouchableOpacity
@@ -98,7 +123,6 @@ export default function DataCsv() {
             </Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -113,7 +137,7 @@ function Header({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
-/* ---- Styles ---- */
+/* ---- Lighter, standard styles ---- */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f7f7fb' },
   content: { padding: 16, paddingBottom: 24 },
