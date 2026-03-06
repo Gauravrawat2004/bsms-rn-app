@@ -50,6 +50,12 @@ export default function AdjustOffDay() {
   const runAdjustment = async () => {
     const courses = coursesStr.split(',').map((s) => s.trim()).filter(Boolean);
     const years = yearsStr.split(',').map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
+
+    if (selectedRoutes.length === 0) {
+      Alert.alert('Error', 'Please select at least one route');
+      return;
+    }
+
     const body = {
       date: dateStr || undefined,
       routes: selectedRoutes,
@@ -57,13 +63,26 @@ export default function AdjustOffDay() {
       apply: true,
     };
 
+    console.log('Sending adjust request:', JSON.stringify(body, null, 2));
+
     try {
       const r = await fetch(`${API_BASE}/adjust-offday`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const j = await r.json();
+
+      const responseText = await r.text();
+      console.log('Raw response:', responseText);
+
+      let j;
+      try {
+        j = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        throw new Error(`Invalid JSON response: ${responseText}`);
+      }
+
       if (!r.ok) throw new Error(j?.error || 'Adjustment failed');
 
       const plans = (j.plans ?? []) as Plan[];
@@ -76,6 +95,7 @@ export default function AdjustOffDay() {
 
       Alert.alert('Adjustment Applied', msg || 'No changes');
     } catch (e: any) {
+      console.error('Adjustment error:', e);
       Alert.alert('Error', e?.message ?? 'Failed to adjust');
     }
   };

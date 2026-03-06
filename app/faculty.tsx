@@ -1,6 +1,6 @@
 
 // app/faculty.tsx
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, Chip, Divider, Text } from 'react-native-paper';
@@ -19,6 +19,7 @@ const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://antonetta-hist
 
 export default function FacultyScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const router = useRouter();
   const facultyId = useMemo(() => id ?? '', [id]);
 
   const [faculty, setFaculty] = useState<Faculty | null>(null);
@@ -63,9 +64,20 @@ export default function FacultyScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ faculty_id: facultyId }),
       });
-      if (!res.ok) throw new Error('Request failed');
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error('Server returned non-JSON:', text);
+        throw new Error('Server error - check backend');
+      }
+      if (!res.ok) throw new Error(data?.error || 'Request failed');
+      console.log('Route change success:', data);
+      alert('Route change request sent');
     } catch (e) {
       console.warn('Failed to request route change:', e);
+      alert('Could not send route change request');
     }
   }
 
@@ -131,6 +143,14 @@ export default function FacultyScreen() {
               Request Route Change
             </Button>
             <Button mode="outlined" onPress={onRefresh}>Refresh</Button>
+            <Button
+              mode="text"
+              onPress={() =>
+                router.push({ pathname: '/chat', params: { role: 'faculty', id: facultyId, name: faculty?.name || 'Faculty' } })
+              }
+            >
+              Chat
+            </Button>
           </View>
         </Card.Content>
       </Card>

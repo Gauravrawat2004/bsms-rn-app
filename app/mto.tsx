@@ -45,7 +45,7 @@ export default function MTOHub() {
         </TouchableOpacity>
         
 
-<TouchableOpacity style={styles.card} onPress={() => router.push('/mto/staff' as any)}>
+<TouchableOpacity style={styles.card} onPress={() => router.push('/mt/staff')}>
   <View style={styles.cardIconRow}>
     <Ionicons name="swap-horizontal-outline" size={28} color="#0a67d3" />
     <Text style={styles.cardTitle}>Replace Staff</Text>
@@ -53,7 +53,7 @@ export default function MTOHub() {
   <Text style={styles.cardDesc}>Replace driver or conductor for any bus.</Text>
 </TouchableOpacity>
 
-<TouchableOpacity style={styles.card} onPress={() => router.push('/mto/adjust' as any)}>
+<TouchableOpacity style={styles.card} onPress={() => router.push('/mt/adjust')}>
   <View style={styles.cardIconRow}>
     <Ionicons name="shuffle-outline" size={28} color="#4f46e5" />
     <Text style={styles.cardTitle}>Adjust Buses (Off-Day)</Text>
@@ -61,12 +61,25 @@ export default function MTOHub() {
   <Text style={styles.cardDesc}>Consolidate buses on same route when some courses/years are off.</Text>
 </TouchableOpacity>
 
+<TouchableOpacity style={styles.card} onPress={() => router.push('/mt/faculty')}>
+  <View style={styles.cardIconRow}>
+    <Ionicons name="school-outline" size={28} color="#10b981" />
+    <Text style={styles.cardTitle}>Add Faculty</Text>
+  </View>
+  <Text style={styles.cardDesc}>Register a new faculty member with contact & department.</Text>
+</TouchableOpacity>
+      </View>
+      {/* chat card */}
+      <View style={{ padding: 16 }}>
+        <TouchableOpacity style={styles.card} onPress={() => router.push({pathname:'/chat',params:{role:'mto',id:'MTO',name:'MTO User'}})}>
+          <View style={styles.cardIconRow}>
+            <Ionicons name="chatbubble-ellipses-outline" size={28} color="#f59e0b" />
+            <Text style={styles.cardTitle}>Chat</Text>
+          </View>
+          <Text style={styles.cardDesc}>Open chat with other users.</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
-    
-
-
-
   );
 }
 

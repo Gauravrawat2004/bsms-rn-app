@@ -1,5 +1,5 @@
 
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import {
@@ -30,6 +30,7 @@ type BusInfo = {
   helper?: string;
   helper_contact?: string;
   conductor_id?: string;
+  conductor_name?: string;
   vehicle_no?: string;
   capacity?: number;
 };
@@ -186,6 +187,8 @@ export default function ConductorScreen() {
     );
   }
 
+  const router = useRouter();
+
   return (
     <View style={{ flex: 1, padding: 16 }}>
       <Card style={styles.card}>
@@ -193,6 +196,13 @@ export default function ConductorScreen() {
           <Text variant="headlineSmall" style={styles.title}>
             Conductor — Bus {busNo}
           </Text>
+          <Button
+            icon="chat"
+            mode="text"
+            onPress={() => router.push((`/chat?role=conductor&id=${encodeURIComponent(conductorId)}&name=${encodeURIComponent(busInfo?.conductor_name || conductorId)}`) as any)}
+          >
+            Chat
+          </Button>
           
           {/* Display Bus, Conductor and Helper Info */}
           {busInfo && (
@@ -231,6 +241,12 @@ export default function ConductorScreen() {
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Conductor ID:</Text>
                   <Text style={styles.infoValue}>{busInfo.conductor_id}</Text>
+                </View>
+              )}
+              {busInfo.conductor_name && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Conductor Name:</Text>
+                  <Text style={styles.infoValue}>{busInfo.conductor_name}</Text>
                 </View>
               )}
             </View>

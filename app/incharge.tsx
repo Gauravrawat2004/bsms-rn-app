@@ -1,16 +1,16 @@
 
 // app/incharge.tsx
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import {
-  ActivityIndicator,
-  Button,
-  Card,
-  Chip,
-  Divider,
-  Text,
-  TextInput,
+    ActivityIndicator,
+    Button,
+    Card,
+    Chip,
+    Divider,
+    Text,
+    TextInput,
 } from 'react-native-paper';
 
 type BusSummary = {
@@ -48,15 +48,17 @@ export default function InchargeScreen() {
     }
   }
 
+  const router = useRouter();
+
   useEffect(() => {
     loadSummary();
   }, []);
 
-  async function refresh() {
+  const onRefresh = async () => {
     setRefreshing(true);
     await loadSummary();
     setRefreshing(false);
-  }
+  };
 
   async function broadcastAlert() {
     if (!alertMsg.trim()) return;
@@ -108,6 +110,13 @@ export default function InchargeScreen() {
         <Card.Content>
           <Text variant="headlineSmall" style={styles.title}>Incharge Dashboard</Text>
           <Text>ID: {inchargeId || '—'}</Text>
+          <Button
+            icon="chat"
+            mode="text"
+            onPress={() => router.push({ pathname: '/chat', params: { role: 'incharge', id: inchargeId || 'INCHARGE', name: 'Incharge' } })}
+          >
+            Chat
+          </Button>
 
           <Divider style={{ marginVertical: 12 }} />
 

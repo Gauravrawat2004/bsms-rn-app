@@ -1,10 +1,10 @@
-// app/mto/data.tsx
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   Alert,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -13,7 +13,10 @@ import {
   View
 } from 'react-native';
 
-const API_BASE =  "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
+/** * Ensure this matches your ngrok URL exactly.
+ * IMPORTANT: No trailing slash at the end!
+ */
+const API_BASE = "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
 
 export default function DataCsv() {
   const router = useRouter();
@@ -26,9 +29,12 @@ export default function DataCsv() {
         copyToCacheDirectory: true,
         multiple: false,
       });
+
       if (pick.canceled || !pick.assets?.length) return;
 
       const file = pick.assets[0];
+      
+      // Strict extension check
       if (!file.name?.toLowerCase().endsWith('.csv')) {
         Alert.alert('Invalid file', 'Please select a CSV file.');
         return;
@@ -36,44 +42,67 @@ export default function DataCsv() {
 
       setUploading(true);
 
-      // Create FormData with proper React Native file structure
       const form = new FormData();
       
-      // React Native FormData requires this specific structure
-      const fileToUpload = {
-        uri: file.uri,
-        name: file.name || 'upload.csv',
-        type: file.mimeType || 'text/csv',
-      };
+      if (Platform.OS === 'web') {
+        /**
+         * WEB FIX: 
+         * expo-document-picker on web returns a File object in 'file.file'.
+         * We append that raw object directly.
+         */
+        const fileToAppend = (file as any).file || file; 
+        form.append("file", fileToAppend);
+      } else {
+        /**
+         * MOBILE FIX: 
+         * standard React Native FormData structure.
+         */
+        form.append('file', {
+          uri: file.uri,
+          name: file.name || 'upload.csv',
+          type: file.mimeType || 'text/csv',
+        } as any);
+      }
 
-      console.log('Uploading file:', fileToUpload);
-      form.append('file', fileToUpload as any);
+      console.log(`Uploading to: ${API_BASE}${endpoint}`);
 
-      // Important: Do NOT set Content-Type header manually for FormData
-      // React Native will auto-set it to multipart/form-data with boundary
-      const resp = await fetch(`${API_BASE}${endpoint}`, { 
-        method: 'POST', 
+      const resp = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
         body: form,
-        // Let browser/RN auto-set headers for multipart
+        headers: {
+          'Accept': 'application/json',
+          // Bypass ngrok warning page
+          'ngrok-skip-browser-warning': 'true', 
+          /** * DO NOT set 'Content-Type' manually. 
+           * The browser (Web) or RN (Mobile) will set it with the correct boundary.
+           */
+        },
       });
-      
+
+      // 1. Check if response is actually JSON
+      const contentType = resp.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const textError = await resp.text();
+        console.error('Server returned non-JSON:', textError);
+        throw new Error(`Server error: Expected JSON but received ${contentType || 'text'}`);
+      }
+
       const json = await resp.json();
-      
+
+      // 2. Handle Logic Errors from Backend
       if (!resp.ok) {
-        console.error('Upload failed:', json);
         throw new Error(json?.error || `Upload failed: ${resp.status}`);
       }
 
-      console.log('Upload success:', json);
-      
+      // 3. Success
       Alert.alert(
-        'CSV Uploaded',
+        'Success',
         endpoint === '/upload/bus'
           ? `Bus CSV processed. ${json?.count ?? 0} buses updated.`
           : `Student CSV processed. ${json?.added ?? 0} new student(s) added.`
       );
     } catch (e: any) {
-      console.error('Upload error:', e);
+      console.error('Upload error detail:', e);
       Alert.alert('Upload error', e?.message ?? 'Failed to upload CSV.');
     } finally {
       setUploading(false);
@@ -84,6 +113,8 @@ export default function DataCsv() {
     <SafeAreaView style={styles.container}>
       <Header title="Data / CSV" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.content}>
+        
+        {/* BUS CARD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -103,6 +134,7 @@ export default function DataCsv() {
           </TouchableOpacity>
         </View>
 
+        {/* STUDENT CARD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -123,6 +155,7 @@ export default function DataCsv() {
             </Text>
           </TouchableOpacity>
         </View>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -131,13 +164,14 @@ export default function DataCsv() {
 function Header({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <View style={styles.header}>
-      <Ionicons name="arrow-back" size={22} color="#374151" onPress={onBack} />
+      <TouchableOpacity onPress={onBack} style={{ padding: 4 }}>
+        <Ionicons name="arrow-back" size={22} color="#374151" />
+      </TouchableOpacity>
       <Text style={styles.title}>{title}</Text>
     </View>
   );
 }
 
-/* ---- Lighter, standard styles ---- */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f7f7fb' },
   content: { padding: 16, paddingBottom: 24 },
@@ -146,7 +180,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, backgroundColor: '#f7f7fb',
   },
   title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -163,7 +196,6 @@ const styles = StyleSheet.create({
   cardHeader: { gap: 6 },
   cardTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
   cardHint: { fontSize: 12, color: '#6b7280' },
-
   btn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     borderWidth: 1, borderColor: '#e5e7eb',

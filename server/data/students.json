@@ -139,5 +139,105 @@
     "bus_no": 4,
     "seat": 10,
     "present": false
+  },
+  {
+    "student_id": "S111",
+    "name": "Arjun Kumar",
+    "course": "BTech",
+    "year": 2,
+    "bus_no": 9,
+    "seat": 1,
+    "present": false,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S112",
+    "name": "Sakshi Joshi",
+    "course": "BCA",
+    "year": 3,
+    "bus_no": 10,
+    "seat": 1,
+    "present": false,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S113",
+    "name": "Rohit Bisht",
+    "course": "MCA",
+    "year": 1,
+    "bus_no": 1,
+    "seat": 11,
+    "present": false,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S114",
+    "name": "Pooja Rawat",
+    "course": "BBA",
+    "year": 2,
+    "bus_no": 2,
+    "seat": 1,
+    "present": false,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S115",
+    "name": "Mayank Singh",
+    "course": "MBA",
+    "year": 1,
+    "bus_no": 3,
+    "seat": 1,
+    "present": false,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S116",
+    "name": "Tanya Sharma",
+    "course": "BTech",
+    "year": 4,
+    "bus_no": 4,
+    "seat": 12,
+    "present": false,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S117",
+    "name": "Aditya Thakur",
+    "course": "BCA",
+    "year": 2,
+    "bus_no": 5,
+    "seat": 1,
+    "present": false,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S118",
+    "name": "Riya Pant",
+    "course": "MCA",
+    "year": 3,
+    "bus_no": 6,
+    "seat": 1,
+    "present": false,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S119",
+    "name": "Harshit Negi",
+    "course": "BTech",
+    "year": 1,
+    "bus_no": 7,
+    "seat": 1,
+    "present": false,
+    "fee_paid": true
+  },
+  {
+    "student_id": "S120",
+    "name": "Muskan Gupta",
+    "course": "BBA",
+    "year": 2,
+    "bus_no": 8,
+    "seat": 1,
+    "present": false,
+    "fee_paid": true
   }
 ]

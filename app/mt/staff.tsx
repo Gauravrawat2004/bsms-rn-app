@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
+    Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 
 const API_BASE = "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
@@ -21,6 +21,7 @@ export default function Staff() {
 
   // conductor form
   const [conductorId, setConductorId] = useState('');
+  const [conductorName, setConductorName] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -63,11 +64,13 @@ export default function Staff() {
       const r = await fetch(`${API_BASE}/api/mto/conductor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bus_no: selectedBus, conductor_id: conductorId.trim() }),
+        body: JSON.stringify({ bus_no: selectedBus, conductor_id: conductorId.trim(), conductor_name: conductorName.trim() || undefined }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.error || 'Update failed');
       Alert.alert('Success', `Conductor updated on Bus ${selectedBus}`);
+      setConductorId('');
+      setConductorName('');
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Conductor update failed');
     }
@@ -136,6 +139,12 @@ export default function Staff() {
             value={conductorId}
             onChangeText={setConductorId}
             autoCapitalize="characters"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Conductor Name (optional)"
+            value={conductorName}
+            onChangeText={setConductorName}
           />
           <TouchableOpacity style={styles.btn} onPress={submitConductor}>
             <Ionicons name="checkmark-circle" size={18} color="#4f46e5" />
