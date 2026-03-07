@@ -139,7 +139,7 @@ export default function InchargeScreen() {
               style={{ flex: 1 }}
               left={<TextInput.Icon icon="map-marker-path" />}
             />
-            <Button mode="outlined" onPress={refresh} style={{ marginLeft: 8 }}>
+            <Button mode="outlined" onPress={onRefresh} style={{ marginLeft: 8 }}>
               Refresh
             </Button>
           </View>
@@ -168,7 +168,7 @@ export default function InchargeScreen() {
         data={filtered}
         keyExtractor={(b) => String(b.bus_no)}
         refreshing={refreshing}
-        onRefresh={refresh}
+        onRefresh={onRefresh}
         renderItem={({ item }) => (
           <Card style={styles.busCard} mode="elevated">
             <Card.Content>
