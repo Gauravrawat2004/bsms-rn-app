@@ -13,8 +13,7 @@ import {
   Text,
   View,
 } from 'react-native';
-
-const API_BASE = "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
+import { API_BASE } from '../config/api';
 
 type SummaryItem = {
   bus_no: number;

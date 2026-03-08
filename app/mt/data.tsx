@@ -12,11 +12,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-
-/** * Ensure this matches your ngrok URL exactly.
- * IMPORTANT: No trailing slash at the end!
- */
-const API_BASE = "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
+import { API_BASE } from '../config/api';
 
 export default function DataCsv() {
   const router = useRouter();
@@ -84,7 +80,9 @@ export default function DataCsv() {
       if (!contentType || !contentType.includes("application/json")) {
         const textError = await resp.text();
         console.error('Server returned non-JSON:', textError);
-        throw new Error(`Server error: Expected JSON but received ${contentType || 'text'}`);
+        throw new Error(
+          textError?.trim() || `Server error: Expected JSON but received ${contentType || 'text'}`
+        );
       }
 
       const json = await resp.json();

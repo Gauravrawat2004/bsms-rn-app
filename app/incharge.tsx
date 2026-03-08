@@ -12,6 +12,7 @@ import {
     Text,
     TextInput,
 } from 'react-native-paper';
+import { API_BASE } from './config/api';
 
 type BusSummary = {
   bus_no: number;
@@ -20,8 +21,6 @@ type BusSummary = {
   present_today: number;
   route?: string | null;
 };
-
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://antonetta-historiographical-vernacularly.ngrok-free.dev';
 
 export default function InchargeScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();

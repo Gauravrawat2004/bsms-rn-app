@@ -12,6 +12,7 @@ import {
   Text,
   TextInput,
 } from 'react-native-paper';
+import { API_BASE } from './config/api';
 
 type Student = {
   student_id: string;
@@ -34,8 +35,6 @@ type BusInfo = {
   vehicle_no?: string;
   capacity?: number;
 };
-
-const API_BASE = 'https://antonetta-historiographical-vernacularly.ngrok-free.dev';
 
 export default function ConductorScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();

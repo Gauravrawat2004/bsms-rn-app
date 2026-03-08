@@ -5,8 +5,7 @@ import React, { useEffect, useState } from 'react';
 import {
     Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-
-const API_BASE = "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
+import { API_BASE } from '../config/api';
 
 type BusRow = { bus_no: number; route: string; driver?: string; driver_contact?: string; conductor_id?: string; capacity?: number; };
 

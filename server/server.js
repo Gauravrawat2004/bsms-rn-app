@@ -357,6 +357,24 @@ app.post('/upload/student', upload.single('file'), async (req, res) => {
     }
 });
 
+app.use((err, req, res, next) => {
+    if (!err) return next();
+
+    console.error('Unhandled server error:', err);
+
+    if (err instanceof multer.MulterError) {
+        return res.status(400).json({ error: err.message });
+    }
+
+    if (err.type === 'entity.parse.failed') {
+        return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+
+    return res.status(err.status || 500).json({
+        error: err.message || 'Internal server error',
+    });
+});
+
 const fetchStudent = async () => {
   try {
     const response = await fetch(`${API_BASE}/api/student/${id}`, {
@@ -915,10 +933,13 @@ app.get('/', (req, res) => {
     res.send('<h2>BSMS Backend is Running</h2>');
 });
 
+module.exports = app;
+
 /* ───────────────────────────── Start Server ───────────────────────────── */
 const ip = getLocalIp();
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`
+if (require.main === module) {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`
     🚀 BSMS Server Started
     -------------------------------------------
     Local:  http://localhost:${PORT}
@@ -926,4 +947,5 @@ app.listen(PORT, '0.0.0.0', () => {
     -------------------------------------------
     Endpoints for CSV: /upload/bus, /upload/student
     `);
-});
+    });
+}

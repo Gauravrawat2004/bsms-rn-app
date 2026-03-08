@@ -5,8 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-
-const API_BASE = "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
+import { API_BASE } from '../config/api';
 
 type BusRow = { bus_no: number; route: string; capacity?: number };
 type Plan = { route: string; keep_bus_no: number; suspend_bus_nos: number[]; moved: Array<{ student_id: string; to_bus_no: number; seat: number }>; overflow: Array<{ student_id: string }> };

@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, Chip, Divider, Text } from 'react-native-paper';
+import { API_BASE } from './config/api';
 
 type Faculty = {
   faculty_id: string;
@@ -14,8 +15,6 @@ type Faculty = {
   fee_required?: boolean;
   assigned_bus?: number | null;
 };
-
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://antonetta-historiographical-vernacularly.ngrok-free.dev';
 
 export default function FacultyScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();

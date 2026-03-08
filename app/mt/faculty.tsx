@@ -11,8 +11,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-
-const API_BASE = "https://antonetta-historiographical-vernacularly.ngrok-free.dev";
+import { API_BASE } from '../config/api';
 
 type Faculty = {
   faculty_id: string;

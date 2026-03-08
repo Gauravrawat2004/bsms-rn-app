@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, Chip, Text } from 'react-native-paper';
+import { API_BASE } from './config/api';
 
 type Student = {
   student_id: string;
@@ -16,8 +17,6 @@ type Student = {
   course?: string | null;
   year?: number | null;
 };
-
-const API_BASE = 'https://antonetta-historiographical-vernacularly.ngrok-free.dev';
 
 export default function StudentScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
