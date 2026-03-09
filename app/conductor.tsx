@@ -1,13 +1,14 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Button,
   Card,
   Chip,
   Divider,
+  Menu,
   Switch,
   Text,
   TextInput,
@@ -38,6 +39,7 @@ type BusInfo = {
 
 export default function ConductorScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const router = useRouter();
   const conductorId = useMemo(() => id ?? '', [id]);
 
   const [busNo, setBusNo] = useState<number | null>(null);
@@ -45,6 +47,18 @@ export default function ConductorScreen() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [alertMsg, setAlertMsg] = useState<string>('');
+  const [alertInfo, setAlertInfo] = useState<string>('');
+  const [alertMenuVisible, setAlertMenuVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<'alert' | 'attendance'>('attendance');
+  const presetAlerts = [
+    'भिमताल मार्ग पर सड़क बंद है',
+    'मार्ग में भारी ट्रैफिक है',
+    'बस 5 मिनट देरी से पहुँचेगी',
+    'बस थोड़ी देर में रवाना होगी',
+    'कृपया अपने आईडी कार्ड तैयार रखें',
+    'सभी यात्री अपनी सीट पर बैठें',
+  ];
 
   // Add passenger form
   const [passengerName, setPassengerName] = useState<string>('');
@@ -61,6 +75,7 @@ export default function ConductorScreen() {
       }
     } catch (e) {
       console.warn('Failed to fetch conductor assignment:', e);
+      Alert.alert('Load error', 'Could not fetch conductor assignment. Using fallback bus mapping if available.');
     }
     const map: Record<string, number> = { C001: 1, C004: 4, C011: 11 };
     const fallbackBus = map[conductorId] ?? null;
@@ -86,6 +101,7 @@ export default function ConductorScreen() {
       }
     } catch (e) {
       console.warn('Failed to load students:', e);
+      Alert.alert('Load error', 'Could not load bus or student details.');
     } finally {
       setLoading(false);
     }
@@ -107,8 +123,10 @@ export default function ConductorScreen() {
       });
       if (!res.ok) throw new Error('Attendance update failed');
       setStudents((prev) => prev.map((s) => (s.student_id === student_id ? { ...s, present } : s)));
+      Alert.alert('Attendance updated', `${student_id} marked ${present ? 'present' : 'absent'}.`);
     } catch (e) {
       console.warn('Failed to update attendance:', e);
+      Alert.alert('Attendance error', 'Failed to update attendance.');
     }
   }
 
@@ -118,8 +136,58 @@ export default function ConductorScreen() {
     setRefreshing(false);
   }
 
+  async function sendHindiAlert() {
+    if (!alertMsg.trim()) {
+      Alert.alert('Missing alert', 'Hindi alert message is required.');
+      return;
+    }
+
+    const payload = {
+      conductor_id: conductorId,
+      bus_no: busNo,
+      message: alertMsg.trim(),
+    };
+
+    const endpoints = ['/api/conductor/alert', '/api/incharge/alert'];
+
+    for (const endpoint of endpoints) {
+      try {
+        const body =
+          endpoint === '/api/incharge/alert'
+            ? JSON.stringify({ incharge_id: conductorId, message: alertMsg.trim() })
+            : JSON.stringify(payload);
+
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || 'Alert request failed');
+        }
+
+        setAlertInfo('Hindi alert sent');
+        setAlertMsg('');
+        setTimeout(() => setAlertInfo(''), 2500);
+        Alert.alert('Alert sent', 'Hindi push alert sent successfully.');
+        return;
+      } catch (e) {
+        console.warn(`Failed to send conductor alert via ${endpoint}:`, e);
+      }
+    }
+
+    setAlertInfo('Failed to send alert');
+    setTimeout(() => setAlertInfo(''), 2500);
+    Alert.alert('Alert error', 'Could not send Hindi alert. Check backend alert route.');
+  }
+
   async function addPassenger() {
-    if (!passengerName.trim()) return;
+    if (!passengerName.trim()) {
+      Alert.alert('Missing data', 'Enter passenger name before adding.');
+      return;
+    }
 
     try {
       const endpoint = ticketMode ? 'ticket' : 'add-student';
@@ -134,15 +202,22 @@ export default function ConductorScreen() {
       });
       const json = await resp.json();
       if (!resp.ok) {
-        console.warn('Add passenger error:', json?.error || 'Unknown error');
+        throw new Error(json?.error || 'Failed to add passenger');
       }
       // Reset form
       setPassengerName('');
       setPassengerId('');
       setTicketMode(true);
       await loadStudents(busNo);
+      Alert.alert(
+        'Passenger added',
+        ticketMode
+          ? `${json?.student_id ?? passengerName} added as a one-day ticket.`
+          : `${json?.student_id ?? passengerName} added to the bus list.`
+      );
     } catch (e) {
       console.warn('Failed to add passenger:', e);
+      Alert.alert('Add passenger error', e instanceof Error ? e.message : 'Failed to add passenger.');
     }
   }
 
@@ -153,11 +228,13 @@ export default function ConductorScreen() {
       });
       const json = await resp.json();
       if (!resp.ok) {
-        console.warn('Remove ticket error:', json?.error || 'Unknown error');
+        throw new Error(json?.error || 'Failed to remove ticket');
       }
       await loadStudents(busNo);
+      Alert.alert('Ticket removed', `${student_id} has been removed from today’s ticket list.`);
     } catch (e) {
       console.warn('Failed to remove ticket:', e);
+      Alert.alert('Remove ticket error', e instanceof Error ? e.message : 'Failed to remove ticket.');
     }
   }
 
@@ -186,21 +263,19 @@ export default function ConductorScreen() {
     );
   }
 
-  const router = useRouter();
-
   return (
     <View style={{ flex: 1, padding: 16 }}>
       <Card style={styles.card}>
         <Card.Content>
           <Text variant="headlineSmall" style={styles.title}>
-            Conductor — Bus {busNo}
+            कंडक्टर - बस {busNo}
           </Text>
           <Button
             icon="chat"
             mode="text"
             onPress={() => router.push((`/chat?role=conductor&id=${encodeURIComponent(conductorId)}&name=${encodeURIComponent(busInfo?.conductor_name || conductorId)}`) as any)}
           >
-            Chat
+            चैट
           </Button>
           
           {/* Display Bus, Conductor and Helper Info */}
@@ -208,19 +283,19 @@ export default function ConductorScreen() {
             <View style={styles.infoSection}>
               {busInfo.route && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Route:</Text>
+                  <Text style={styles.infoLabel}>मार्ग:</Text>
                   <Text style={styles.infoValue}>{busInfo.route}</Text>
                 </View>
               )}
               {busInfo.vehicle_no && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Vehicle:</Text>
+                  <Text style={styles.infoLabel}>वाहन:</Text>
                   <Text style={styles.infoValue}>{busInfo.vehicle_no}</Text>
                 </View>
               )}
               {busInfo.driver && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Driver:</Text>
+                  <Text style={styles.infoLabel}>ड्राइवर:</Text>
                   <Text style={styles.infoValue}>
                     {busInfo.driver}
                     {busInfo.driver_contact ? ` (${busInfo.driver_contact})` : ''}
@@ -229,7 +304,7 @@ export default function ConductorScreen() {
               )}
               {busInfo.helper && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Helper:</Text>
+                  <Text style={styles.infoLabel}>सहायक:</Text>
                   <Text style={styles.infoValue}>
                     {busInfo.helper}
                     {busInfo.helper_contact ? ` (${busInfo.helper_contact})` : ''}
@@ -238,105 +313,164 @@ export default function ConductorScreen() {
               )}
               {busInfo.conductor_id && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Conductor ID:</Text>
+                  <Text style={styles.infoLabel}>कंडक्टर आईडी:</Text>
                   <Text style={styles.infoValue}>{busInfo.conductor_id}</Text>
                 </View>
               )}
               {busInfo.conductor_name && (
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Conductor Name:</Text>
+                  <Text style={styles.infoLabel}>कंडक्टर:</Text>
                   <Text style={styles.infoValue}>{busInfo.conductor_name}</Text>
                 </View>
               )}
             </View>
           )}
-          
+
           <Divider style={{ marginVertical: 12 }} />
 
-          {/* Add passenger (ticket/permanent) */}
-          <Text variant="titleMedium" style={{ marginBottom: 8 }}>Add Passenger</Text>
-          <View style={styles.addRow}>
-            <TextInput
-              mode="outlined"
-              label="Name (required)"
-              value={passengerName}
-              onChangeText={setPassengerName}
-              style={{ flex: 1 }}
-            />
-            <TextInput
-              mode="outlined"
-              label="Student ID (optional)"
-              value={passengerId}
-              onChangeText={setPassengerId}
-              style={{ flex: 1 }}
-            />
+          <View style={styles.tabRow}>
+            <Button
+              mode={activeTab === 'attendance' ? 'contained' : 'outlined'}
+              compact
+              onPress={() => setActiveTab('attendance')}
+            >
+              उपस्थिति
+            </Button>
+            <Button
+              mode={activeTab === 'alert' ? 'contained' : 'outlined'}
+              compact
+              onPress={() => setActiveTab('alert')}
+            >
+              सतर्कता
+            </Button>
           </View>
-          <View style={styles.addRow2}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Switch value={ticketMode} onValueChange={setTicketMode} />
-              <Text>Ticket (one-day)</Text>
+
+          {activeTab === 'alert' ? (
+            <View style={styles.tabPanel}>
+              <Menu
+                visible={alertMenuVisible}
+                onDismiss={() => setAlertMenuVisible(false)}
+                anchor={
+                  <Button mode="outlined" onPress={() => setAlertMenuVisible(true)}>
+                    {alertMsg || 'सतर्कता चुनें'}
+                  </Button>
+                }
+              >
+                {presetAlerts.map((preset) => (
+                  <Menu.Item
+                    key={preset}
+                    onPress={() => {
+                      setAlertMsg(preset);
+                      setAlertMenuVisible(false);
+                    }}
+                    title={preset}
+                  />
+                ))}
+              </Menu>
+              <TextInput
+                mode="outlined"
+                label="चुनी गई सतर्कता"
+                placeholder="अपना संदेश लिखें"
+                value={alertMsg}
+                onChangeText={setAlertMsg}
+                multiline
+                style={{ marginTop: 8 }}
+                left={<TextInput.Icon icon="bullhorn" />}
+              />
+              <View style={styles.alertRow}>
+                <Button mode="contained" onPress={sendHindiAlert}>
+                  भेजें
+                </Button>
+                {alertInfo ? <Text style={styles.alertInfo}>{alertInfo}</Text> : null}
+              </View>
             </View>
-            <Button mode="contained" onPress={addPassenger}>Add</Button>
-          </View>
+          ) : (
+            <View style={styles.tabPanel}>
+              <Text variant="titleMedium" style={{ marginBottom: 8 }}>यात्री जोड़ें</Text>
+              <View style={styles.addRow}>
+                <TextInput
+                  mode="outlined"
+                  label="नाम (आवश्यक)"
+                  value={passengerName}
+                  onChangeText={setPassengerName}
+                  style={styles.flexField}
+                />
+                <TextInput
+                  mode="outlined"
+                  label="आईडी (वैकल्पिक)"
+                  value={passengerId}
+                  onChangeText={setPassengerId}
+                  style={styles.flexField}
+                />
+              </View>
+              <View style={styles.addRow2}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Switch value={ticketMode} onValueChange={setTicketMode} />
+                  <Text>एक दिन की टिकट</Text>
+                </View>
+                <Button mode="contained" onPress={addPassenger}>जोड़ें</Button>
+              </View>
 
-          <Divider style={{ marginVertical: 12 }} />
+              <Divider style={{ marginVertical: 12 }} />
 
-          <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-            <Chip icon="account-group" style={styles.chip}>
-              Total Today: {students.length}
-            </Chip>
-            <Button mode="outlined" onPress={refresh}>Refresh</Button>
-          </View>
+              <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                <Chip icon="account-group" style={styles.chip}>
+                  आज कुल: {students.length}
+                </Chip>
+                <Button mode="outlined" onPress={refresh}>रीफ्रेश करें</Button>
+              </View>
+            </View>
+          )}
         </Card.Content>
       </Card>
 
-      <FlatList
-        data={students}
-        keyExtractor={(item) => item.student_id}
-        onRefresh={refresh}
-        refreshing={refreshing}
-        renderItem={({ item }) => (
-          <Card style={styles.item}>
-            <Card.Content>
-              <View style={styles.itemHeader}>
-                <Text variant="titleMedium">{item.name}</Text>
-                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                  {item.is_temp ? <Chip icon="ticket-confirmation" style={styles.statusChip}>Ticket</Chip> : null}
-                  <Chip icon={item.present ? 'check-circle' : 'close-circle'} style={styles.statusChip}>
-                    {item.present ? 'Present' : 'Absent'}
-                  </Chip>
+      {activeTab === 'attendance' ? (
+        <FlatList
+          data={students}
+          keyExtractor={(item) => item.student_id}
+          onRefresh={refresh}
+          refreshing={refreshing}
+          renderItem={({ item }) => (
+            <Card style={styles.item}>
+              <Card.Content>
+                <View style={styles.itemHeader}>
+                  <Text variant="titleMedium">{item.name}</Text>
+                  <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                    {item.is_temp ? <Chip icon="ticket-confirmation" style={styles.statusChip}>टिकट</Chip> : null}
+                    <Chip icon={item.present ? 'check-circle' : 'close-circle'} style={styles.statusChip}>
+                      {item.present ? 'उपस्थित' : 'अनुपस्थित'}
+                    </Chip>
+                  </View>
                 </View>
-              </View>
-              <Text>Seat: {item.seat ?? 'N/A'}</Text>
+                <Text>सीट: {item.seat ?? 'N/A'}</Text>
 
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-                <Button
-                  mode="contained"
-                  onPress={() => markAttendance(item.student_id, true)}
-                  disabled={item.present}
-                >
-                  Mark Present
-                </Button>
-                <Button
-                  mode="outlined"
-                  onPress={() => markAttendance(item.student_id, false)}
-                  disabled={!item.present}
-                >
-                  Mark Absent
-                </Button>
-
-                {/* Remove ticket button for ticket passengers */}
-                {item.is_temp ? (
-                  <Button mode="outlined" onPress={() => removeTicket(item.student_id)}>
-                    Remove Ticket
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+                  <Button
+                    mode="contained"
+                    onPress={() => markAttendance(item.student_id, true)}
+                    disabled={item.present}
+                  >
+                    उपस्थित
                   </Button>
-                ) : null}
-              </View>
-            </Card.Content>
-          </Card>
-        )}
-        contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 }}
-      />
+                  <Button
+                    mode="outlined"
+                    onPress={() => markAttendance(item.student_id, false)}
+                    disabled={!item.present}
+                  >
+                    अनुपस्थित
+                  </Button>
+                  {item.is_temp ? (
+                    <Button mode="outlined" onPress={() => removeTicket(item.student_id)}>
+                      टिकट हटाएँ
+                    </Button>
+                  ) : null}
+                </View>
+              </Card.Content>
+            </Card>
+          )}
+          contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -349,8 +483,13 @@ const styles = StyleSheet.create({
   item: { marginTop: 10, borderRadius: 12 },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statusChip: { borderRadius: 10 },
+  flexField: { flex: 1 },
   addRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   addRow2: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 8, justifyContent: 'space-between' },
+  tabRow: { flexDirection: 'row', gap: 10 },
+  tabPanel: { marginTop: 12 },
+  alertRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  alertInfo: { flex: 1, color: '#6b7280', fontSize: 12 },
   infoSection: { marginTop: 8, gap: 6 },
   infoRow: { flexDirection: 'row', alignItems: 'center' },
   infoLabel: { fontWeight: '600', width: 100, color: '#555' },

@@ -8,12 +8,14 @@ import { API_BASE } from './config/api';
 
 type Faculty = {
   faculty_id: string;
+  phone?: string;
   name: string;
   department?: string;
   priority_seat?: boolean;
   flexible_route?: boolean;
   fee_required?: boolean;
   assigned_bus?: number | null;
+  bus_no?: number | null;
 };
 
 export default function FacultyScreen() {
@@ -28,17 +30,38 @@ export default function FacultyScreen() {
   async function loadFaculty() {
     try {
       setLoading(true);
-      // Replace with your actual faculty endpoint or Supabase query
-      // For now, simulate static privileges
-      setFaculty({
-        faculty_id: facultyId,
-        name: 'Faculty User',
-        department: 'CSE',
-        priority_seat: true,
-        flexible_route: true,
-        fee_required: false,
-        assigned_bus: null,
-      });
+      const endpoints = [
+        `${API_BASE}/api/faculty/${encodeURIComponent(facultyId)}`,
+        `${API_BASE}/api/mto/faculties`,
+      ];
+
+      for (const endpoint of endpoints) {
+        const res = await fetch(endpoint);
+        if (!res.ok) continue;
+        const data = await res.json();
+
+        if (Array.isArray(data)) {
+          const match = data.find((item: Faculty) => item.faculty_id === facultyId);
+          if (match) {
+            setFaculty({
+              ...match,
+              assigned_bus: match.assigned_bus ?? match.bus_no ?? null,
+            });
+            return;
+          }
+          continue;
+        }
+
+        if (data?.faculty_id) {
+          setFaculty({
+            ...data,
+            assigned_bus: data.assigned_bus ?? data.bus_no ?? null,
+          });
+          return;
+        }
+      }
+
+      setFaculty(null);
     } catch (e) {
       console.warn('Failed to load faculty:', e);
     } finally {
@@ -119,6 +142,7 @@ export default function FacultyScreen() {
           <Text variant="titleMedium">{faculty.name}</Text>
           <Text>ID: {faculty.faculty_id}</Text>
           {faculty.department ? <Text>Dept: {faculty.department}</Text> : null}
+          {faculty.phone ? <Text>Phone: {faculty.phone}</Text> : null}
 
           <Divider style={{ marginVertical: 12 }} />
 
@@ -145,7 +169,7 @@ export default function FacultyScreen() {
             <Button
               mode="text"
               onPress={() =>
-                router.push({ pathname: '/chat', params: { role: 'faculty', id: facultyId, name: faculty?.name || 'Faculty' } })
+                router.push({ pathname: '/chat', params: { role: 'faculty', id: facultyId, name: faculty?.name || facultyId } })
               }
             >
               Chat

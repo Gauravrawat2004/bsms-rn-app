@@ -18,6 +18,43 @@ export default function DataCsv() {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
 
+  const normalizeBase = API_BASE.replace(/\/+$/, '');
+
+  const buildFormData = (file: DocumentPicker.DocumentPickerAsset) => {
+    const form = new FormData();
+
+    if (Platform.OS === 'web') {
+      const fileToAppend = (file as any).file || file;
+      form.append('file', fileToAppend);
+      return form;
+    }
+
+    form.append('file', {
+      uri: file.uri,
+      name: file.name || 'upload.csv',
+      type: file.mimeType || 'text/csv',
+    } as any);
+    return form;
+  };
+
+  const parseUploadResponse = async (resp: Response) => {
+    const contentType = resp.headers.get('content-type') || '';
+    const bodyText = await resp.text();
+
+    if (contentType.includes('application/json')) {
+      try {
+        return {
+          json: bodyText ? JSON.parse(bodyText) : null,
+          text: bodyText,
+        };
+      } catch {
+        throw new Error('Server returned invalid JSON.');
+      }
+    }
+
+    return { json: null, text: bodyText };
+  };
+
   const uploadCsvTo = async (endpoint: '/upload/bus' | '/upload/student') => {
     try {
       const pick = await DocumentPicker.getDocumentAsync({
@@ -38,66 +75,61 @@ export default function DataCsv() {
 
       setUploading(true);
 
-      const form = new FormData();
-      
-      if (Platform.OS === 'web') {
-        /**
-         * WEB FIX: 
-         * expo-document-picker on web returns a File object in 'file.file'.
-         * We append that raw object directly.
-         */
-        const fileToAppend = (file as any).file || file; 
-        form.append("file", fileToAppend);
-      } else {
-        /**
-         * MOBILE FIX: 
-         * standard React Native FormData structure.
-         */
-        form.append('file', {
-          uri: file.uri,
-          name: file.name || 'upload.csv',
-          type: file.mimeType || 'text/csv',
-        } as any);
+      const uploadPaths = Array.from(new Set([
+        `/api${endpoint}` as const,
+        endpoint,
+      ]));
+
+      let uploadResult: any = null;
+      let lastError: Error | null = null;
+      const attemptedUrls: string[] = [];
+
+      for (const path of uploadPaths) {
+        try {
+          const url = `${normalizeBase}${path}`;
+          attemptedUrls.push(url);
+          const resp = await fetch(url, {
+            method: 'POST',
+            body: buildFormData(file),
+            headers: {
+              Accept: 'application/json',
+              'ngrok-skip-browser-warning': 'true',
+            },
+          });
+
+          const { json, text } = await parseUploadResponse(resp);
+
+          if (!resp.ok) {
+            throw new Error(
+              json?.error ||
+                text?.trim() ||
+                `Upload failed: ${resp.status}`
+            );
+          }
+
+          if (!json) {
+            throw new Error(text?.trim() || 'Server returned an empty response.');
+          }
+
+          uploadResult = json;
+          lastError = null;
+          break;
+        } catch (error: any) {
+          lastError = error instanceof Error ? error : new Error('Upload failed.');
+        }
       }
 
-      console.log(`Uploading to: ${API_BASE}${endpoint}`);
-
-      const resp = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        body: form,
-        headers: {
-          'Accept': 'application/json',
-          // Bypass ngrok warning page
-          'ngrok-skip-browser-warning': 'true', 
-          /** * DO NOT set 'Content-Type' manually. 
-           * The browser (Web) or RN (Mobile) will set it with the correct boundary.
-           */
-        },
-      });
-
-      // 1. Check if response is actually JSON
-      const contentType = resp.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const textError = await resp.text();
-        console.error('Server returned non-JSON:', textError);
+      if (lastError || !uploadResult) {
         throw new Error(
-          textError?.trim() || `Server error: Expected JSON but received ${contentType || 'text'}`
+          `${lastError?.message || 'Failed to upload CSV.'}\nTried: ${attemptedUrls.join(', ')}`
         );
       }
 
-      const json = await resp.json();
-
-      // 2. Handle Logic Errors from Backend
-      if (!resp.ok) {
-        throw new Error(json?.error || `Upload failed: ${resp.status}`);
-      }
-
-      // 3. Success
       Alert.alert(
         'Success',
         endpoint === '/upload/bus'
-          ? `Bus CSV processed. ${json?.count ?? 0} buses updated.`
-          : `Student CSV processed. ${json?.added ?? 0} new student(s) added.`
+          ? `Bus CSV processed. ${uploadResult?.count ?? 0} buses updated.`
+          : `Student CSV processed. ${uploadResult?.added ?? 0} new student(s) added.`
       );
     } catch (e: any) {
       console.error('Upload error detail:', e);

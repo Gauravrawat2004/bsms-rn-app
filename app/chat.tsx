@@ -1,9 +1,12 @@
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+    Alert,
     ActivityIndicator,
     Button,
     FlatList,
+    KeyboardAvoidingView,
+    Platform,
     SafeAreaView, StyleSheet,
     Text,
     TextInput,
@@ -19,12 +22,55 @@ type ChatEntry = {
   ts: string;
 };
 
+type FacultyRow = {
+  faculty_id: string;
+  name: string;
+};
+
+type BusRow = {
+  conductor_id?: string;
+  conductor_name?: string;
+};
+
 export default function ChatScreen() {
   const { role, id, name } = useLocalSearchParams<{ role?: string; id?: string; name?: string }>();
   const [msgs, setMsgs] = useState<ChatEntry[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [nameMap, setNameMap] = useState<Record<string, string>>({});
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadDirectory = async () => {
+    const nextMap: Record<string, string> = {};
+
+    try {
+      const facultyRes = await fetch(`${API_BASE}/api/mto/faculties`);
+      const facultyRows: FacultyRow[] = facultyRes.ok ? await facultyRes.json() : [];
+      for (const row of facultyRows) {
+        if (row.faculty_id && row.name) nextMap[row.faculty_id] = row.name;
+      }
+    } catch (e) {
+      console.warn('Failed to load faculty name directory', e);
+    }
+
+    try {
+      const busRes = await fetch(`${API_BASE}/api/buses`);
+      const buses: BusRow[] = busRes.ok ? await busRes.json() : [];
+      for (const row of buses) {
+        if (row.conductor_id && row.conductor_name) {
+          nextMap[row.conductor_id] = row.conductor_name;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load conductor name directory', e);
+    }
+
+    if (id && name) {
+      nextMap[id] = name;
+    }
+
+    setNameMap(nextMap);
+  };
 
   const load = async () => {
     try {
@@ -39,6 +85,7 @@ export default function ChatScreen() {
   };
 
   useEffect(() => {
+    loadDirectory();
     load();
     intervalRef.current = setInterval(load, 5000);
     return () => {
@@ -49,51 +96,78 @@ export default function ChatScreen() {
   const send = async () => {
     if (!text.trim() || !role || !id || !name) return;
     try {
-      await fetch(`${API_BASE}/api/chat/send`, {
+      const resp = await fetch(`${API_BASE}/api/chat/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role, user_id: id, name, message: text.trim() }),
       });
+      if (!resp.ok) {
+        throw new Error('Failed to send message');
+      }
       setText('');
       await load();
     } catch (e) {
       console.warn('Chat send error', e);
+      Alert.alert('Chat error', 'Failed to send message.');
     }
   };
+
+  const senderLabel = [name, role].filter(Boolean).join(' • ');
+
+  const resolveName = (entry: ChatEntry) =>
+    entry.name || nameMap[entry.user_id] || entry.user_id;
+
+  const ownId = id || '';
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Chat ({role || 'unknown'})</Text>
+        <Text style={styles.title}>{name || 'Chat'}</Text>
+        <Text style={styles.subtitle}>{senderLabel || 'Unknown sender'}</Text>
       </View>
-      <View style={styles.content}>
+      <KeyboardAvoidingView
+        style={styles.content}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 84 : 0}
+      >
         {loading ? (
           <ActivityIndicator />
         ) : (
           <FlatList
-            data={msgs}
+            data={[...msgs].reverse()}
             keyExtractor={(item, idx) => idx.toString()}
+            inverted
             renderItem={({ item }) => (
-              <View style={styles.msgRow}>
-                <Text style={styles.msgAuthor}>{`${item.name} (${item.role})`}</Text>
-                <Text>{item.message}</Text>
-                <Text style={styles.msgTs}>{new Date(item.ts).toLocaleTimeString()}</Text>
+              <View style={[
+                styles.msgRow,
+                item.user_id === ownId ? styles.msgRowOwn : styles.msgRowOther,
+              ]}>
+                <View style={[
+                  styles.bubble,
+                  item.user_id === ownId ? styles.bubbleOwn : styles.bubbleOther,
+                ]}>
+                  <Text style={styles.msgAuthor}>{resolveName(item)}</Text>
+                  <Text style={styles.msgMeta}>{`${item.role} • ${item.user_id}`}</Text>
+                  <Text style={styles.msgText}>{item.message}</Text>
+                  <Text style={styles.msgTs}>{new Date(item.ts).toLocaleTimeString()}</Text>
+                </View>
               </View>
             )}
-            scrollEnabled={true}
+            contentContainerStyle={styles.listContent}
           />
         )}
-      </View>
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder="Type message..."
-          placeholderTextColor="#999"
-        />
-        <Button onPress={send} title="Send" />
-      </View>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            value={text}
+            onChangeText={setText}
+            placeholder="Type message..."
+            placeholderTextColor="#999"
+            multiline
+          />
+          <Button onPress={send} title="Send" />
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -102,10 +176,19 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f7f7fb' },
   header: { padding: 16, backgroundColor: '#ffffff', borderBottomWidth: 1, borderColor: '#e5e7eb' },
   title: { fontSize: 18, fontWeight: '600' },
+  subtitle: { marginTop: 2, color: '#6b7280', fontSize: 12 },
   content: { flex: 1 },
-  msgRow: { padding: 8, borderBottomWidth: 1, borderColor: '#e5e7eb' },
+  listContent: { padding: 12, gap: 8 },
+  msgRow: { flexDirection: 'row', marginVertical: 4 },
+  msgRowOwn: { justifyContent: 'flex-end' },
+  msgRowOther: { justifyContent: 'flex-start' },
+  bubble: { maxWidth: '82%', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+  bubbleOwn: { backgroundColor: '#dcf8c6', borderBottomRightRadius: 4 },
+  bubbleOther: { backgroundColor: '#ffffff', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#e5e7eb' },
   msgAuthor: { fontSize: 12, fontWeight: '600' },
-  msgTs: { fontSize: 10, color: '#6b7280' },
-  inputRow: { flexDirection: 'row', padding: 8, borderTopWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#ffffff', alignItems: 'center' },
-  input: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, marginRight: 8, height: 40 },
+  msgMeta: { fontSize: 11, color: '#6b7280', marginBottom: 2 },
+  msgText: { color: '#111827' },
+  msgTs: { fontSize: 10, color: '#6b7280', alignSelf: 'flex-end', marginTop: 4 },
+  inputRow: { flexDirection: 'row', padding: 8, borderTopWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#ffffff', alignItems: 'flex-end' },
+  input: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, minHeight: 42, maxHeight: 100, backgroundColor: '#fff' },
 });

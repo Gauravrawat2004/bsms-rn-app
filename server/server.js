@@ -276,7 +276,7 @@ function mapStudentRow(row, buses, existingById, seatsByBus) {
 
 /* ============================== CSV UPLOAD ENDPOINTS ============================== */
 
-app.post('/upload/bus', upload.single('file'), async (req, res) => {
+async function handleBusUpload(req, res) {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file received' });
 
@@ -307,9 +307,12 @@ app.post('/upload/bus', upload.single('file'), async (req, res) => {
         console.error('Bus Upload Error:', err);
         res.status(500).json({ error: err.message });
     }
-});
+}
 
-app.post('/upload/student', upload.single('file'), async (req, res) => {
+app.post('/upload/bus', upload.single('file'), handleBusUpload);
+app.post('/api/upload/bus', upload.single('file'), handleBusUpload);
+
+async function handleStudentUpload(req, res) {
     try {
         if (!req.file) return res.status(400).json({ error: 'No file received' });
 
@@ -355,7 +358,10 @@ app.post('/upload/student', upload.single('file'), async (req, res) => {
         console.error('Student Upload Error:', err);
         res.status(500).json({ error: err.message });
     }
-});
+}
+
+app.post('/upload/student', upload.single('file'), handleStudentUpload);
+app.post('/api/upload/student', upload.single('file'), handleStudentUpload);
 
 app.use((err, req, res, next) => {
     if (!err) return next();
@@ -538,6 +544,20 @@ app.post('/api/incharge/alert', (req, res) => {
     }
 });
 
+app.post('/api/conductor/alert', (req, res) => {
+    try {
+        const { conductor_id, bus_no, message } = req.body;
+        if (!message) {
+            return res.status(400).json({ error: 'Message required' });
+        }
+
+        console.log(`CONDUCTOR ALERT from ${conductor_id || 'UNKNOWN'} on bus ${bus_no || 'N/A'}: ${message}`);
+        res.json({ message: 'Alert sent successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 /* ============================== CONDUCTOR ENDPOINTS ============================== */
 
 // Get conductor assignment (bus_no for conductor_id)
@@ -714,13 +734,19 @@ app.delete('/api/conductor/ticket/:studentId', (req, res) => {
 // Create new faculty record
 app.post('/api/mto/faculty', (req, res) => {
     try {
-        const { name, phone, department } = req.body;
+        const { name, phone, department, bus_no } = req.body;
         if (!name || !phone || !department) {
             return res.status(400).json({ error: 'name, phone and department required' });
         }
         const faculties = readJson(FACULTIES_FILE);
         const id = `FAC${(faculties.length + 1).toString().padStart(3, '0')}`;
-        const faculty = { faculty_id: id, name, phone, department };
+        const faculty = {
+            faculty_id: id,
+            name,
+            phone,
+            department,
+            bus_no: bus_no == null || bus_no === '' ? null : Number(bus_no),
+        };
         faculties.push(faculty);
         writeJson(FACULTIES_FILE, faculties);
         res.json(faculty);
@@ -752,6 +778,75 @@ app.get('/api/mto/faculties', (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+app.get('/api/faculty/:facultyId', (req, res) => {
+    try {
+        const faculties = readJson(FACULTIES_FILE);
+        const faculty = faculties.find((item) => item.faculty_id === req.params.facultyId);
+        if (!faculty) {
+            return res.status(404).json({ error: 'Faculty not found' });
+        }
+        res.json(faculty);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+function updateFacultyRecord(req, res) {
+    try {
+        const targetId = req.params.facultyId || req.body.faculty_id;
+        const { name, phone, department, bus_no } = req.body;
+        if (!targetId) {
+            return res.status(400).json({ error: 'faculty_id required' });
+        }
+
+        const faculties = readJson(FACULTIES_FILE);
+        const index = faculties.findIndex((item) => item.faculty_id === targetId);
+        if (index === -1) {
+            return res.status(404).json({ error: 'Faculty not found' });
+        }
+
+        faculties[index] = {
+            ...faculties[index],
+            name: name ?? faculties[index].name,
+            phone: phone ?? faculties[index].phone,
+            department: department ?? faculties[index].department,
+            bus_no: bus_no == null || bus_no === '' ? null : Number(bus_no),
+        };
+
+        writeJson(FACULTIES_FILE, faculties);
+        res.json({ message: 'Faculty updated', faculty: faculties[index] });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}
+
+function deleteFacultyRecord(req, res) {
+    try {
+        const targetId = req.params.facultyId || req.body.faculty_id;
+        if (!targetId) {
+            return res.status(400).json({ error: 'faculty_id required' });
+        }
+
+        const faculties = readJson(FACULTIES_FILE);
+        const nextFaculties = faculties.filter((item) => item.faculty_id !== targetId);
+        if (nextFaculties.length === faculties.length) {
+            return res.status(404).json({ error: 'Faculty not found' });
+        }
+
+        writeJson(FACULTIES_FILE, nextFaculties);
+        res.json({ message: 'Faculty deleted', faculty_id: targetId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}
+
+app.put('/api/mto/faculty/:facultyId', updateFacultyRecord);
+app.put('/api/mto/faculty', updateFacultyRecord);
+app.post('/api/mto/faculty/update', updateFacultyRecord);
+app.delete('/api/mto/faculty/:facultyId', deleteFacultyRecord);
+app.delete('/api/mto/faculty', deleteFacultyRecord);
+app.post('/api/mto/faculty/delete', deleteFacultyRecord);
 
 /* ============================== CHAT ENDPOINTS ============================== */
 
