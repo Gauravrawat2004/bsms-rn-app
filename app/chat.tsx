@@ -12,6 +12,7 @@ import {
     TextInput,
     View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE } from './config/api';
 
 type ChatEntry = {
@@ -34,6 +35,7 @@ type BusRow = {
 
 export default function ChatScreen() {
   const { role, id, name } = useLocalSearchParams<{ role?: string; id?: string; name?: string }>();
+  const insets = useSafeAreaInsets();
   const [msgs, setMsgs] = useState<ChatEntry[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -127,8 +129,8 @@ export default function ChatScreen() {
       </View>
       <KeyboardAvoidingView
         style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 84 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 12}
       >
         {loading ? (
           <ActivityIndicator />
@@ -154,9 +156,10 @@ export default function ChatScreen() {
               </View>
             )}
             contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
           />
         )}
-        <View style={styles.inputRow}>
+        <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 8) }]}>
           <TextInput
             style={styles.input}
             value={text}
@@ -178,7 +181,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '600' },
   subtitle: { marginTop: 2, color: '#6b7280', fontSize: 12 },
   content: { flex: 1 },
-  listContent: { padding: 12, gap: 8 },
+  listContent: { padding: 12, gap: 8, paddingBottom: 20 },
   msgRow: { flexDirection: 'row', marginVertical: 4 },
   msgRowOwn: { justifyContent: 'flex-end' },
   msgRowOther: { justifyContent: 'flex-start' },
@@ -189,6 +192,6 @@ const styles = StyleSheet.create({
   msgMeta: { fontSize: 11, color: '#6b7280', marginBottom: 2 },
   msgText: { color: '#111827' },
   msgTs: { fontSize: 10, color: '#6b7280', alignSelf: 'flex-end', marginTop: 4 },
-  inputRow: { flexDirection: 'row', padding: 8, borderTopWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#ffffff', alignItems: 'flex-end' },
+  inputRow: { flexDirection: 'row', paddingTop: 8, paddingHorizontal: 8, borderTopWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#ffffff', alignItems: 'flex-end' },
   input: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, minHeight: 42, maxHeight: 100, backgroundColor: '#fff' },
 });

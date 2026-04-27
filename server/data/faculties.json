@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "faculty_id": "FAC001",
+    "name": "Mr ab",
+    "phone": "69351245484",
+    "department": "Cse",
+    "bus_no": 2
+  }
+]

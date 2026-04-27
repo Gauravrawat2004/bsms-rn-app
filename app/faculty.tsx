@@ -3,7 +3,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Card, Chip, Divider, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, Card, Chip, Dialog, Divider, Portal, Text, TextInput } from 'react-native-paper';
 import { API_BASE } from './config/api';
 
 type Faculty = {
@@ -11,11 +11,17 @@ type Faculty = {
   phone?: string;
   name: string;
   department?: string;
-  priority_seat?: boolean;
-  flexible_route?: boolean;
-  fee_required?: boolean;
   assigned_bus?: number | null;
   bus_no?: number | null;
+};
+
+type BusInfo = {
+  bus_no: number;
+  route?: string;
+  vehicle_no?: string;
+  driver?: string;
+  driver_contact?: string;
+  time?: string;
 };
 
 export default function FacultyScreen() {
@@ -24,8 +30,12 @@ export default function FacultyScreen() {
   const facultyId = useMemo(() => id ?? '', [id]);
 
   const [faculty, setFaculty] = useState<Faculty | null>(null);
+  const [busInfo, setBusInfo] = useState<BusInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [routeDialogVisible, setRouteDialogVisible] = useState(false);
+  const [requestedRoute, setRequestedRoute] = useState('');
+  const [sendingRoute, setSendingRoute] = useState(false);
 
   async function loadFaculty() {
     try {
@@ -43,29 +53,54 @@ export default function FacultyScreen() {
         if (Array.isArray(data)) {
           const match = data.find((item: Faculty) => item.faculty_id === facultyId);
           if (match) {
-            setFaculty({
+            const nextFaculty = {
               ...match,
               assigned_bus: match.assigned_bus ?? match.bus_no ?? null,
-            });
+            };
+            setFaculty(nextFaculty);
+            await loadBusInfo(nextFaculty.assigned_bus ?? null);
             return;
           }
           continue;
         }
 
         if (data?.faculty_id) {
-          setFaculty({
+          const nextFaculty = {
             ...data,
             assigned_bus: data.assigned_bus ?? data.bus_no ?? null,
-          });
+          };
+          setFaculty(nextFaculty);
+          await loadBusInfo(nextFaculty.assigned_bus ?? null);
           return;
         }
       }
 
       setFaculty(null);
+      setBusInfo(null);
     } catch (e) {
       console.warn('Failed to load faculty:', e);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadBusInfo(busNo: number | null) {
+    if (!busNo) {
+      setBusInfo(null);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/buses`);
+      if (!res.ok) {
+        setBusInfo(null);
+        return;
+      }
+      const buses: BusInfo[] = await res.json();
+      setBusInfo(buses.find((bus) => bus.bus_no === busNo) ?? null);
+    } catch (e) {
+      console.warn('Failed to load bus info:', e);
+      setBusInfo(null);
     }
   }
 
@@ -80,26 +115,28 @@ export default function FacultyScreen() {
   };
 
   async function requestRouteChange() {
+    if (!requestedRoute.trim() || !faculty) return;
     try {
-      const res = await fetch(`${API_BASE}/api/faculty/request-route-change`, {
+      setSendingRoute(true);
+      const message = `Route change request: ${requestedRoute.trim()}`;
+      const res = await fetch(`${API_BASE}/api/chat/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ faculty_id: facultyId }),
+        body: JSON.stringify({
+          role: 'faculty',
+          user_id: facultyId,
+          name: faculty.name || facultyId,
+          message,
+        }),
       });
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        console.error('Server returned non-JSON:', text);
-        throw new Error('Server error - check backend');
-      }
+      const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Request failed');
-      console.log('Route change success:', data);
-      alert('Route change request sent');
+      setRequestedRoute('');
+      setRouteDialogVisible(false);
     } catch (e) {
       console.warn('Failed to request route change:', e);
-      alert('Could not send route change request');
+    } finally {
+      setSendingRoute(false);
     }
   }
 
@@ -148,21 +185,28 @@ export default function FacultyScreen() {
 
           <View style={styles.chips}>
             <Chip icon="star" style={styles.chip}>
-              Priority Seat: {faculty.priority_seat ? 'Yes' : 'No'}
-            </Chip>
-            <Chip icon="shuffle" style={styles.chip}>
-              Flexible Route: {faculty.flexible_route ? 'Yes' : 'No'}
-            </Chip>
-            <Chip icon="cash" style={styles.chip}>
-              Fee Required: {faculty.fee_required ? 'Yes' : 'No'}
+              Priority Seat: Front seat
             </Chip>
             <Chip icon="bus" style={styles.chip}>
               Assigned Bus: {faculty.assigned_bus ?? 'N/A'}
             </Chip>
           </View>
 
+          {busInfo ? (
+            <View style={styles.busInfoBox}>
+              <Text style={styles.busInfoTitle}>Assigned Route Details</Text>
+              <Text>Route: {busInfo.route ?? 'N/A'}</Text>
+              <Text>Vehicle: {busInfo.vehicle_no ?? 'N/A'}</Text>
+              <Text>
+                Driver: {busInfo.driver ?? 'N/A'}
+                {busInfo.driver_contact ? ` (${busInfo.driver_contact})` : ''}
+              </Text>
+              <Text>Departure: {busInfo.time ?? 'N/A'}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.actions}>
-            <Button mode="contained" onPress={requestRouteChange}>
+            <Button mode="contained" onPress={() => setRouteDialogVisible(true)}>
               Request Route Change
             </Button>
             <Button mode="outlined" onPress={onRefresh}>Refresh</Button>
@@ -177,6 +221,25 @@ export default function FacultyScreen() {
           </View>
         </Card.Content>
       </Card>
+      <Portal>
+        <Dialog visible={routeDialogVisible} onDismiss={() => setRouteDialogVisible(false)}>
+          <Dialog.Title>Request Route Change</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="Requested new route"
+              value={requestedRoute}
+              onChangeText={setRequestedRoute}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setRouteDialogVisible(false)}>Cancel</Button>
+            <Button onPress={requestRouteChange} loading={sendingRoute} disabled={!requestedRoute.trim() || sendingRoute}>
+              Send
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScrollView>
   );
 }
@@ -187,5 +250,14 @@ const styles = StyleSheet.create({
   title: { marginBottom: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 },
   chip: { borderRadius: 12 },
+  busInfoBox: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    gap: 4,
+  },
+  busInfoTitle: { fontWeight: '700', color: '#111827', marginBottom: 4 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' },
 });

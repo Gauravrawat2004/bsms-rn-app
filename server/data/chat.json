@@ -1,1 +1,23 @@
-[]
+[
+  {
+    "role": "faculty",
+    "user_id": "FAC001",
+    "name": "Mr abs",
+    "message": "Route change request: Mukhani",
+    "ts": "2026-03-09T04:01:54.140Z"
+  },
+  {
+    "role": "conductor",
+    "user_id": "C001",
+    "name": "C001",
+    "message": "Hlo",
+    "ts": "2026-03-09T04:05:07.608Z"
+  },
+  {
+    "role": "faculty",
+    "user_id": "FAC001",
+    "name": "Mr ab",
+    "message": "Route change request: Kathgodam",
+    "ts": "2026-03-09T08:50:12.298Z"
+  }
+]

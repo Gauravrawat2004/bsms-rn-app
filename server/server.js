@@ -11,6 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const multer = require('multer');
+const axios = require('axios');
 const { parse: parseCsvSync } = require('csv-parse/sync');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -52,18 +53,15 @@ const BUSES_FILE = path.join(DATA_DIR, 'buses.json');
 const STUDENTS_FILE = path.join(DATA_DIR, 'students.json');
 const FACULTIES_FILE = path.join(DATA_DIR, 'faculties.json');
 const CHAT_FILE = path.join(DATA_DIR, 'chat.json');
-
 const TICKETS_FILE = path.join(DATA_DIR, 'temp_tickets.json');
+const DEVICE_TOKENS_FILE = path.join(DATA_DIR, 'device_tokens.json');
+const PENDING_STUDENTS_FILE = path.join(DATA_DIR, 'pending_students.json');
 
-[BUSES_FILE, STUDENTS_FILE, TICKETS_FILE].forEach((file) => {
+[BUSES_FILE, STUDENTS_FILE, TICKETS_FILE, DEVICE_TOKENS_FILE, PENDING_STUDENTS_FILE].forEach((file) => {
     if (!fs.existsSync(file)) fs.writeFileSync(file, '[]');
 });
 // ensure faculty and chat files exist
 [ FACULTIES_FILE, CHAT_FILE ].forEach((file) => {
-    if (!fs.existsSync(file)) fs.writeFileSync(file, '[]');
-});
-
-[BUSES_FILE, STUDENTS_FILE, TICKETS_FILE].forEach((file) => {
     if (!fs.existsSync(file)) fs.writeFileSync(file, '[]');
 });
 
@@ -97,7 +95,11 @@ function todayISO() {
 function purgeOldTickets() {
     const all = readJson(TICKETS_FILE);
     const today = todayISO();
-    const todays = all.filter((t) => t.date === today);
+    let todays = all.filter((t) => t.date === today);
+    
+    // Also filter out expired tickets based on trip_type
+    todays = filterExpiredTickets(todays);
+    
     if (todays.length !== all.length) writeJson(TICKETS_FILE, todays);
     return todays;
 }
@@ -129,6 +131,84 @@ function getLocalIp() {
     }
     return '127.0.0.1';
 }
+
+/* ───────────────────────────── Push Notifications ───────────────────────────── */
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+/**
+ * Send push notifications to registered devices
+ * @param {string[]} pushTokens - Array of Expo push tokens
+ * @param {string} title - Notification title
+ * @param {string} body - Notification body/message
+ */
+async function sendPushNotifications(pushTokens, title, body) {
+    if (!pushTokens || pushTokens.length === 0) {
+        console.log('No push tokens available, skipping push notification');
+        return;
+    }
+
+    const messages = pushTokens.map(token => ({
+        to: token,
+        sound: 'default',
+        title: title,
+        body: body,
+        badge: 1,
+        priority: 'high',
+    }));
+
+    try {
+        const response = await axios.post(EXPO_PUSH_URL, messages, {
+            headers: {
+                'Accept': 'application/json',
+                'Accept-Encoding': 'gzip, deflate',
+                'Content-Type': 'application/json',
+            },
+        });
+
+        console.log('Push notifications sent successfully', response.data);
+        return response.data;
+    } catch (error) {
+        console.error('Error sending push notifications:', error.message);
+    }
+}
+
+/**
+ * Get all registered device tokens for a specific role
+ * @param {string} role - 'conductor' or 'incharge'
+ * @returns {string[]} Array of push tokens
+ */
+function getDeviceTokensByRole(role) {
+    const tokens = readJson(DEVICE_TOKENS_FILE);
+    return tokens
+        .filter((t) => t.role === role && t.token)
+        .map((t) => t.token);
+}
+
+/**
+ * Filter out expired tickets based on trip_type
+ * - one_way: expires after 3 hours
+ * - round_trip: expires after 12 hours
+ */
+function filterExpiredTickets(tickets) {
+    const now = new Date();
+    return tickets.filter((ticket) => {
+        if (!ticket.arrival_time) {
+            // If no arrival_time, consider it expired (shouldn't happen)
+            return false;
+        }
+
+        const arrivalTime = new Date(ticket.arrival_time);
+        const expiryMs = ticket.trip_type === 'round_trip' ? 12 * 60 * 60 * 1000 : 3 * 60 * 60 * 1000;
+        const isExpired = now.getTime() - arrivalTime.getTime() > expiryMs;
+
+        if (isExpired) {
+            console.log(`Ticket ${ticket.student_id} (${ticket.trip_type}) expired`);
+        }
+
+        return !isExpired;
+    });
+}
+
 
 /* ───────────────────────────── Multer ───────────────────────────── */
 const upload = multer({
@@ -363,6 +443,170 @@ async function handleStudentUpload(req, res) {
 app.post('/upload/student', upload.single('file'), handleStudentUpload);
 app.post('/api/upload/student', upload.single('file'), handleStudentUpload);
 
+/* ───────────────────────────── Google Form Integration Endpoints ───────────────────────────── */
+
+// Get all pending student submissions
+app.get('/api/admin/pending-students', (req, res) => {
+    try {
+        const pendingStudents = readJson(PENDING_STUDENTS_FILE);
+        res.json(pendingStudents || []);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Import student from Google Form (or manual JSON paste)
+app.post('/api/admin/import-from-form', (req, res) => {
+    try {
+        const { students } = req.body;
+
+        if (!Array.isArray(students) || students.length === 0) {
+            return res.status(400).json({ error: 'students array is required and must not be empty' });
+        }
+
+        let pendingStudents = readJson(PENDING_STUDENTS_FILE);
+
+        const addedCount = students.filter((s) => {
+            if (!s.student_id || !s.name) return false;
+
+            // Check if already pending or in official students
+            const exists = pendingStudents.some((p) => p.student_id === s.student_id);
+            const alreadyOfficial = readJson(STUDENTS_FILE).some((st) => st.student_id === s.student_id);
+
+            if (exists || alreadyOfficial) return false;
+
+            pendingStudents.push({
+                id: `PENDING_${Date.now()}_${Math.random()}`,
+                student_id: s.student_id,
+                name: s.name,
+                course: s.course || null,
+                year: s.year || null,
+                route: s.route || null,
+                submitted_at: new Date().toISOString(),
+            });
+
+            return true;
+        }).length;
+
+        writeJson(PENDING_STUDENTS_FILE, pendingStudents);
+        res.json({ message: 'Students imported', added: addedCount });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Approve a pending student (make official)
+app.post('/api/admin/approve-student', (req, res) => {
+    try {
+        const { pending_id } = req.body;
+
+        if (!pending_id) {
+            return res.status(400).json({ error: 'pending_id is required' });
+        }
+
+        let pendingStudents = readJson(PENDING_STUDENTS_FILE);
+        const pendingIndex = pendingStudents.findIndex((p) => p.id === pending_id);
+
+        if (pendingIndex === -1) {
+            return res.status(404).json({ error: 'Pending student not found' });
+        }
+
+        const pending = pendingStudents[pendingIndex];
+        const students = readJson(STUDENTS_FILE);
+
+        // Check if student already exists
+        if (students.some((s) => s.student_id === pending.student_id)) {
+            return res.status(400).json({ error: 'Student already exists in official list' });
+        }
+
+        // Add to official students
+        const newStudent = {
+            student_id: pending.student_id,
+            name: pending.name,
+            course: pending.course || null,
+            year: pending.year || null,
+            route: pending.route || null,
+            bus_no: null,
+            seat: null,
+            present: false,
+            fee_paid: false,
+        };
+
+        students.push(newStudent);
+        writeJson(STUDENTS_FILE, students);
+
+        // Remove from pending
+        pendingStudents.splice(pendingIndex, 1);
+        writeJson(PENDING_STUDENTS_FILE, pendingStudents);
+
+        res.json({ message: 'Student approved', student: newStudent });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Reject a pending student
+app.post('/api/admin/reject-student', (req, res) => {
+    try {
+        const { pending_id } = req.body;
+
+        if (!pending_id) {
+            return res.status(400).json({ error: 'pending_id is required' });
+        }
+
+        let pendingStudents = readJson(PENDING_STUDENTS_FILE);
+        const pendingIndex = pendingStudents.findIndex((p) => p.id === pending_id);
+
+        if (pendingIndex === -1) {
+            return res.status(404).json({ error: 'Pending student not found' });
+        }
+
+        pendingStudents.splice(pendingIndex, 1);
+        writeJson(PENDING_STUDENTS_FILE, pendingStudents);
+
+        res.json({ message: 'Student rejected' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Manually add a student (admin quick add)
+app.post('/api/admin/add-student-manual', (req, res) => {
+    try {
+        const { student_id, name, course, year, route } = req.body;
+
+        if (!student_id || !name) {
+            return res.status(400).json({ error: 'student_id and name are required' });
+        }
+
+        const students = readJson(STUDENTS_FILE);
+
+        // Check if student already exists
+        if (students.some((s) => s.student_id === student_id)) {
+            return res.status(400).json({ error: 'Student already exists' });
+        }
+
+        const newStudent = {
+            student_id,
+            name,
+            course: course || null,
+            year: year || null,
+            route: route || null,
+            bus_no: null,
+            seat: null,
+            present: false,
+            fee_paid: false,
+        };
+
+        students.push(newStudent);
+        writeJson(STUDENTS_FILE, students);
+
+        res.json({ message: 'Student added', student: newStudent });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.use((err, req, res, next) => {
     if (!err) return next();
 
@@ -527,6 +771,51 @@ app.get('/api/incharge/summary', (req, res) => {
     }
 });
 
+/* ───────────────────────────── Device Token Endpoints ───────────────────────────── */
+// Register device push token
+app.post('/api/device-token/register', (req, res) => {
+    try {
+        const { token, userId, role, device_name, os } = req.body;
+
+        if (!token || !userId || !role) {
+            return res.status(400).json({ error: 'token, userId, and role are required' });
+        }
+
+        if (!['conductor', 'incharge'].includes(role)) {
+            return res.status(400).json({ error: 'role must be conductor or incharge' });
+        }
+
+        let tokenData = readJson(DEVICE_TOKENS_FILE);
+
+        // Check if token already exists
+        const existingToken = tokenData.find((t) => t.token === token);
+        if (existingToken) {
+            // Update if exists
+            existingToken.userId = userId;
+            existingToken.role = role;
+            existingToken.device_name = device_name;
+            existingToken.os = os;
+            existingToken.updated_at = new Date().toISOString();
+        } else {
+            // Add new token
+            tokenData.push({
+                token,
+                userId,
+                role,
+                device_name,
+                os,
+                registered_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            });
+        }
+
+        writeJson(DEVICE_TOKENS_FILE, tokenData);
+        res.json({ message: 'Device token registered successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Incharge alert endpoint
 app.post('/api/incharge/alert', (req, res) => {
     try {
@@ -535,8 +824,16 @@ app.post('/api/incharge/alert', (req, res) => {
             return res.status(400).json({ error: 'Message required' });
         }
 
-        // For now, just log the alert. In a real app, you'd send notifications
         console.log(`ALERT from ${incharge_id}: ${message}`);
+
+        // Send push notifications to all conductors and incharge
+        const conductorTokens = getDeviceTokensByRole('conductor');
+        const inchargeTokens = getDeviceTokensByRole('incharge');
+        const allTokens = [...conductorTokens, ...inchargeTokens];
+
+        if (allTokens.length > 0) {
+            sendPushNotifications(allTokens, '🚨 Alert from Incharge', message);
+        }
 
         res.json({ message: 'Alert sent successfully' });
     } catch (err) {
@@ -552,6 +849,16 @@ app.post('/api/conductor/alert', (req, res) => {
         }
 
         console.log(`CONDUCTOR ALERT from ${conductor_id || 'UNKNOWN'} on bus ${bus_no || 'N/A'}: ${message}`);
+
+        // Send push notifications to all conductors and incharge
+        const conductorTokens = getDeviceTokensByRole('conductor');
+        const inchargeTokens = getDeviceTokensByRole('incharge');
+        const allTokens = [...conductorTokens, ...inchargeTokens];
+
+        if (allTokens.length > 0) {
+            sendPushNotifications(allTokens, `🚨 Alert from Bus ${bus_no || 'N/A'}`, message);
+        }
+
         res.json({ message: 'Alert sent successfully' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -626,9 +933,13 @@ app.post('/api/conductor/attendance', (req, res) => {
 // Add one-day ticket
 app.post('/api/conductor/ticket', (req, res) => {
     try {
-        const { conductor_id, name, student_id } = req.body;
+        const { conductor_id, name, student_id, trip_type } = req.body;
         if (!conductor_id || !name) {
             return res.status(400).json({ error: 'conductor_id and name required' });
+        }
+
+        if (!['one_way', 'round_trip'].includes(trip_type)) {
+            return res.status(400).json({ error: 'trip_type must be one_way or round_trip' });
         }
 
         const buses = readJson(BUSES_FILE);
@@ -637,7 +948,9 @@ app.post('/api/conductor/ticket', (req, res) => {
             return res.status(404).json({ error: 'Conductor not assigned to bus' });
         }
 
-        const tickets = readJson(TICKETS_FILE);
+        let tickets = readJson(TICKETS_FILE);
+        // Filter out expired tickets
+        tickets = filterExpiredTickets(tickets);
         const seat = nextAvailableSeat(buses, readJson(STUDENTS_FILE), tickets, bus.bus_no);
 
         if (!seat) {
@@ -651,6 +964,8 @@ app.post('/api/conductor/ticket', (req, res) => {
             seat,
             present: false,
             date: todayISO(),
+            arrival_time: new Date().toISOString(),
+            trip_type: trip_type || 'one_way',
         };
 
         tickets.push(ticket);

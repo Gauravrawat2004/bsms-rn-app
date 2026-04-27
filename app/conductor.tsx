@@ -3,17 +3,24 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import {
-  ActivityIndicator,
-  Button,
-  Card,
-  Chip,
-  Divider,
-  Menu,
-  Switch,
-  Text,
-  TextInput,
+    ActivityIndicator,
+    Button,
+    Card,
+    Chip,
+    Divider,
+    Menu,
+    Switch,
+    Text,
+    TextInput,
 } from 'react-native-paper';
 import { API_BASE } from './config/api';
+import {
+    configureNotifications,
+    getDevicePushToken,
+    onNotificationReceived,
+    registerDeviceToken,
+    requestNotificationPermissions,
+} from './utils/push-notifications';
 
 type Student = {
   student_id: string;
@@ -64,6 +71,7 @@ export default function ConductorScreen() {
   const [passengerName, setPassengerName] = useState<string>('');
   const [passengerId, setPassengerId] = useState<string>('');
   const [ticketMode, setTicketMode] = useState<boolean>(true); // true = one-day
+  const [tripType, setTripType] = useState<'one_way' | 'round_trip'>('one_way');
 
   async function resolveBus() {
     try {
@@ -111,6 +119,41 @@ export default function ConductorScreen() {
     (async () => {
       const bus = await resolveBus();
       await loadStudents(bus);
+    })();
+  }, [conductorId]);
+
+  // Register device for push notifications
+  useEffect(() => {
+    (async () => {
+      try {
+        configureNotifications();
+        const hasPermission = await requestNotificationPermissions();
+        if (!hasPermission) {
+          console.warn('Notification permissions not granted');
+          return;
+        }
+
+        const token = await getDevicePushToken();
+        if (token) {
+          const success = await registerDeviceToken(token, conductorId, 'conductor', API_BASE);
+          if (success) {
+            console.log('Device registered for push notifications');
+          }
+        }
+
+        // Listen for incoming notifications
+        const subscription = onNotificationReceived((notification) => {
+          console.log('Notification received:', notification);
+          Alert.alert(
+            notification.request.content.title || 'Notification',
+            notification.request.content.body || 'You have a new message'
+          );
+        });
+
+        return () => subscription.remove();
+      } catch (error) {
+        console.error('Error setting up push notifications:', error);
+      }
     })();
   }, [conductorId]);
 
@@ -191,14 +234,21 @@ export default function ConductorScreen() {
 
     try {
       const endpoint = ticketMode ? 'ticket' : 'add-student';
+      const body: any = {
+        conductor_id: conductorId,
+        name: passengerName,
+        student_id: passengerId || undefined,
+      };
+
+      // Add trip_type for ticket mode
+      if (ticketMode) {
+        body.trip_type = tripType;
+      }
+
       const resp = await fetch(`${API_BASE}/api/conductor/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conductor_id: conductorId,
-          name: passengerName,
-          student_id: passengerId || undefined,
-        }),
+        body: JSON.stringify(body),
       });
       const json = await resp.json();
       if (!resp.ok) {

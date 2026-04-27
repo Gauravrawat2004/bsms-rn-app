@@ -2,7 +2,7 @@
 // app/incharge.tsx
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import {
     ActivityIndicator,
     Button,
@@ -13,6 +13,13 @@ import {
     TextInput,
 } from 'react-native-paper';
 import { API_BASE } from './config/api';
+import {
+    configureNotifications,
+    getDevicePushToken,
+    onNotificationReceived,
+    registerDeviceToken,
+    requestNotificationPermissions,
+} from './utils/push-notifications';
 
 type BusSummary = {
   bus_no: number;
@@ -52,6 +59,41 @@ export default function InchargeScreen() {
   useEffect(() => {
     loadSummary();
   }, []);
+
+  // Register device for push notifications
+  useEffect(() => {
+    (async () => {
+      try {
+        configureNotifications();
+        const hasPermission = await requestNotificationPermissions();
+        if (!hasPermission) {
+          console.warn('Notification permissions not granted');
+          return;
+        }
+
+        const token = await getDevicePushToken();
+        if (token) {
+          const success = await registerDeviceToken(token, inchargeId, 'incharge', API_BASE);
+          if (success) {
+            console.log('Device registered for push notifications');
+          }
+        }
+
+        // Listen for incoming notifications
+        const subscription = onNotificationReceived((notification) => {
+          console.log('Notification received:', notification);
+          Alert.alert(
+            notification.request.content.title || 'Notification',
+            notification.request.content.body || 'You have a new message'
+          );
+        });
+
+        return () => subscription.remove();
+      } catch (error) {
+        console.error('Error setting up push notifications:', error);
+      }
+    })();
+  }, [inchargeId]);
 
   const onRefresh = async () => {
     setRefreshing(true);

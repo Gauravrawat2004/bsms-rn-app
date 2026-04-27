@@ -5,13 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import { API_BASE } from '../config/api';
 
@@ -27,23 +27,35 @@ export default function LiveStatus() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [fleet, setFleet] = useState<SummaryItem[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
 
-  const fetchSummary = async () => {
-    setLoading(true);
+  const fetchSummary = async (setLoadingState: boolean = true) => {
+    if (setLoadingState) setLoading(true);
     try {
       const resp = await fetch(`${API_BASE}/summary`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json: SummaryItem[] = await resp.json();
       setFleet(json);
+      setLastUpdated(new Date().toLocaleTimeString());
     } catch (e: any) {
+      console.warn('Failed to load fleet summary:', e?.message);
       Alert.alert('Error', e?.message ?? 'Failed to load fleet summary');
     } finally {
-      setLoading(false);
+      if (setLoadingState) setLoading(false);
     }
   };
 
   useEffect(() => {
+    // Initial fetch
     fetchSummary();
+
+    // Set up polling every 5 seconds
+    const pollingInterval = setInterval(() => {
+      fetchSummary(false);
+    }, 5000);
+
+    // Clean up interval on unmount
+    return () => clearInterval(pollingInterval);
   }, []);
 
   const totalCapacity = useMemo(
@@ -73,7 +85,7 @@ export default function LiveStatus() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Live Status" onBack={() => router.back()} />
+      <Header title={`Live Status (${lastUpdated})`} onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.content}>
         {/* Overview stats */}
         <View style={styles.statBar}>
@@ -107,7 +119,7 @@ export default function LiveStatus() {
 
               <View style={styles.row}>
                 <Text style={styles.capText}>
-                  Capacity {bus.occupied} / {bus.capacity}
+                  Total: {bus.occupied} / {bus.capacity}
                 </Text>
                 <Text style={styles.presentText}>Present today: {bus.present_today}</Text>
               </View>
