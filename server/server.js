@@ -4,7 +4,6 @@
  * Place at: X:\bsms-rn-app\server\server.js
  */
 
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -14,6 +13,8 @@ const multer = require('multer');
 const axios = require('axios');
 const { parse: parseCsvSync } = require('csv-parse/sync');
 const { createClient } = require('@supabase/supabase-js');
+
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -44,8 +45,30 @@ app.use((req, res, next) => {
 });
 
 /* ───────────────────────────── Storage ───────────────────────────── */
-const DATA_DIR = process.env.VERCEL ? path.join(os.tmpdir(), 'bsms-data') : path.join(__dirname, 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+function canWriteToDir(dir) {
+    try {
+        fs.mkdirSync(dir, { recursive: true });
+        const probe = path.join(dir, `.write-test-${process.pid}-${Date.now()}`);
+        fs.writeFileSync(probe, 'ok');
+        fs.unlinkSync(probe);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function resolveDataDir() {
+    const preferredDir = process.env.BSMS_DATA_DIR || path.join(__dirname, 'data');
+    if (canWriteToDir(preferredDir)) return preferredDir;
+
+    const tmpDir = path.join(os.tmpdir(), 'bsms-data');
+    if (canWriteToDir(tmpDir)) return tmpDir;
+
+    throw new Error(`No writable data directory found. Tried ${preferredDir} and ${tmpDir}`);
+}
+
+const DATA_DIR = resolveDataDir();
+console.log(`Using data directory: ${DATA_DIR}`);
 
 const BUSES_FILE = path.join(DATA_DIR, 'buses.json');
 const STUDENTS_FILE = path.join(DATA_DIR, 'students.json');
@@ -1534,6 +1557,14 @@ app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 
 app.get('/', (req, res) => {
     res.send('<h2>BSMS Backend is Running</h2>');
+});
+
+app.use((err, _req, res, _next) => {
+    console.error('Unhandled API error:', err);
+    res.status(500).json({
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'production' ? undefined : err.message,
+    });
 });
 
 module.exports = app;
