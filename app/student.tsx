@@ -1,8 +1,10 @@
 
 // app/student.tsx
+import * as DocumentPicker from 'expo-document-picker';
+import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, Chip, Text } from 'react-native-paper';
 import { API_BASE } from './config/api';
 
@@ -16,6 +18,7 @@ type Student = {
   route?: string;
   course?: string | null;
   year?: number | null;
+  photo_url?: string | null;
 };
 
 export default function StudentScreen() {
@@ -25,6 +28,60 @@ export default function StudentScreen() {
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [uploading, setUploading] = useState<boolean>(false);
+
+  const uploadPhoto = async () => {
+    try {
+      // Use document picker with image MIME types
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/jpeg', 'image/png', 'image/webp'],
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const file = result.assets[0];
+      if (!file.uri) {
+        Alert.alert('Error', 'Invalid file selected');
+        return;
+      }
+
+      setUploading(true);
+
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      formData.append('photo', {
+        uri: file.uri,
+        type: file.mimeType || 'image/jpeg',
+        name: file.name || `photo_${studentId}.jpg`,
+      } as any);
+
+      const response = await fetch(
+        `${API_BASE}/api/student/${encodeURIComponent(studentId)}/photo`,
+        {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to upload photo');
+      }
+
+      Alert.alert('Success', 'Photo uploaded successfully');
+      // Refresh student data to get updated photo URL
+      await fetchStudent();
+    } catch (error) {
+      console.error('Photo upload error:', error);
+      Alert.alert('Upload Error', 'Failed to upload photo. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   async function fetchStudent() {
     try {
@@ -87,7 +144,32 @@ export default function StudentScreen() {
           <Text variant="headlineSmall" style={styles.title}>
             Student Dashboard
           </Text>
-          <Text variant="titleMedium">{student.name}</Text>
+
+          {/* Photo Section */}
+          <View style={styles.photoSection}>
+            {student.photo_url ? (
+              <ExpoImage
+                source={{ uri: student.photo_url }}
+                style={styles.photo}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.photo, styles.photoPlaceholder]}>
+                <Text style={styles.photoPlaceholderText}>No Photo</Text>
+              </View>
+            )}
+            <Button
+              mode="contained"
+              onPress={uploadPhoto}
+              loading={uploading}
+              disabled={uploading}
+              style={styles.uploadButton}
+            >
+              {uploading ? 'Uploading...' : 'Upload Photo'}
+            </Button>
+          </View>
+
+          <Text variant="titleMedium" style={styles.nameText}>{student.name}</Text>
           <Text>ID: {student.student_id}</Text>
           {student.course ? <Text>Course: {student.course}</Text> : null}
           {student.year ? <Text>Year: {student.year}</Text> : null}
@@ -129,6 +211,12 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   card: { borderRadius: 16 },
   title: { marginBottom: 6 },
+  photoSection: { alignItems: 'center', marginVertical: 16 },
+  photo: { width: 140, height: 180, borderRadius: 8, marginBottom: 12 },
+  photoPlaceholder: { backgroundColor: '#e5e7eb', justifyContent: 'center', alignItems: 'center' },
+  photoPlaceholderText: { color: '#9ca3af', fontSize: 14 },
+  uploadButton: { width: '100%', marginBottom: 8 },
+  nameText: { marginTop: 12 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 },
   chip: { borderRadius: 12 },
   statusRow: { flexDirection: 'row', gap: 10, marginVertical: 12 },

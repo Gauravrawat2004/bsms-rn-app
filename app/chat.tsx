@@ -1,19 +1,26 @@
-import { useLocalSearchParams } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    ActivityIndicator,
-    Button,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView, StyleSheet,
-    Text,
-    TextInput,
-    View
+  ActivityIndicator,
+  Alert,
+  Button,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE } from './config/api';
+import {
+  getDevicePushToken,
+  registerDeviceToken,
+  usePushNotifications,
+} from './utils/Notification';
 
 type ChatEntry = {
   role: string;
@@ -35,12 +42,57 @@ type BusRow = {
 
 export default function ChatScreen() {
   const { role, id, name } = useLocalSearchParams<{ role?: string; id?: string; name?: string }>();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [msgs, setMsgs] = useState<ChatEntry[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [nameMap, setNameMap] = useState<Record<string, string>>({});
+  const [selectedMessageIndex, setSelectedMessageIndex] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<boolean>(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Setup push notifications for messages and alerts
+  usePushNotifications(
+    // On chat message received
+    (notification: Notifications.Notification) => {
+      console.log('New chat message:', notification.request.content.body);
+      // Reload messages
+      load();
+    },
+    // On alert received
+    (notification: Notifications.Notification) => {
+      console.log('Alert received:', notification.request.content.body);
+      // Show alert dialog
+      Alert.alert(
+        notification.request.content.title || '🚨 Alert',
+        notification.request.content.body || ''
+      );
+    },
+    // On notification tapped
+    (response: Notifications.NotificationResponse) => {
+      const data = response.notification.request.content.data as Record<string, any>;
+      if (data?.type === 'message') {
+        // Already on chat, just reload
+        load();
+      } else if (data?.type === 'alert') {
+        // Could navigate to alerts screen if you have one
+        console.log('Alert notification tapped');
+      }
+    }
+  );
+
+  // Register push token on mount
+  useEffect(() => {
+    const setupPushToken = async () => {
+      const token = await getDevicePushToken();
+      if (token && role && id) {
+        await registerDeviceToken(token, id, role as 'conductor' | 'incharge', API_BASE);
+      }
+    };
+
+    setupPushToken();
+  }, [role, id]);
 
   const loadDirectory = async () => {
     const nextMap: Record<string, string> = {};
@@ -95,6 +147,72 @@ export default function ChatScreen() {
     };
   }, []);
 
+  const deleteMessage = async (msgIndex: number) => {
+    const message = [...msgs].reverse()[msgIndex];
+    if (!message) {
+      Alert.alert('Error', 'Message not found');
+      return;
+    }
+
+    if (message.user_id !== id) {
+      Alert.alert('Error', 'You can only delete your own messages');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => setSelectedMessageIndex(null) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeleting(true);
+
+              const deleteUrl = `${API_BASE}/api/chat/messages/${encodeURIComponent(message.user_id)}/${encodeURIComponent(message.ts)}`;
+              
+              const response = await fetch(deleteUrl, {
+                method: 'DELETE',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  requesting_user_id: id
+                })
+              });
+
+              if (!response.ok) {
+                const errorBody = await response.text();
+                throw new Error(
+                  `Failed to delete (${response.status}): ${errorBody || response.statusText}`
+                );
+              }
+
+              setMsgs((prevMsgs) =>
+                prevMsgs.filter(
+                  (msg) => !(msg.user_id === message.user_id && msg.ts === message.ts)
+                )
+              );
+              
+              setSelectedMessageIndex(null);
+              Alert.alert('Success', 'Message deleted successfully');
+            } catch (error) {
+              console.error('Delete error:', error);
+              Alert.alert(
+                'Error',
+                `Failed to delete message: ${error instanceof Error ? error.message : 'Unknown error'}`
+              );
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const send = async () => {
     if (!text.trim() || !role || !id || !name) return;
     try {
@@ -137,23 +255,42 @@ export default function ChatScreen() {
         ) : (
           <FlatList
             data={[...msgs].reverse()}
-            keyExtractor={(item, idx) => idx.toString()}
+            keyExtractor={(item, idx) => `${item.user_id}-${item.ts}`}
             inverted
-            renderItem={({ item }) => (
-              <View style={[
-                styles.msgRow,
-                item.user_id === ownId ? styles.msgRowOwn : styles.msgRowOther,
-              ]}>
-                <View style={[
-                  styles.bubble,
-                  item.user_id === ownId ? styles.bubbleOwn : styles.bubbleOther,
+            renderItem={({ item, index }) => (
+              <Pressable
+                onLongPress={() => setSelectedMessageIndex(item.user_id === ownId ? index : null)}
+                delayLongPress={500}
+                style={[
+                  styles.msgRow,
+                  item.user_id === ownId ? styles.msgRowOwn : styles.msgRowOther,
                 ]}>
+                <View
+                  style={[
+                    styles.bubble,
+                    item.user_id === ownId ? styles.bubbleOwn : styles.bubbleOther,
+                    selectedMessageIndex === index && styles.bubbleSelected,
+                  ]}>
                   <Text style={styles.msgAuthor}>{resolveName(item)}</Text>
                   <Text style={styles.msgMeta}>{`${item.role} • ${item.user_id}`}</Text>
                   <Text style={styles.msgText}>{item.message}</Text>
                   <Text style={styles.msgTs}>{new Date(item.ts).toLocaleTimeString()}</Text>
+
+                  {selectedMessageIndex === index && item.user_id === ownId && (
+                    <Pressable
+                      onPress={() => deleteMessage(index)}
+                      disabled={deleting}
+                      style={({ pressed }) => [
+                        styles.deleteButton,
+                        pressed && styles.deleteButtonPressed,
+                      ]}>
+                      <Text style={styles.deleteButtonText}>
+                        {deleting ? 'Deleting...' : 'Delete'}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
-              </View>
+              </Pressable>
             )}
             contentContainerStyle={styles.listContent}
             keyboardShouldPersistTaps="handled"
@@ -188,10 +325,14 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '82%', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
   bubbleOwn: { backgroundColor: '#dcf8c6', borderBottomRightRadius: 4 },
   bubbleOther: { backgroundColor: '#ffffff', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#e5e7eb' },
+  bubbleSelected: { backgroundColor: '#fff3cd', borderWidth: 2, borderColor: '#ffc107' },
   msgAuthor: { fontSize: 12, fontWeight: '600' },
   msgMeta: { fontSize: 11, color: '#6b7280', marginBottom: 2 },
   msgText: { color: '#111827' },
   msgTs: { fontSize: 10, color: '#6b7280', alignSelf: 'flex-end', marginTop: 4 },
+  deleteButton: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 10, backgroundColor: '#dc2626', borderRadius: 6, alignSelf: 'flex-start' },
+  deleteButtonPressed: { opacity: 0.7 },
+  deleteButtonText: { color: '#ffffff', fontSize: 12, fontWeight: '600' },
   inputRow: { flexDirection: 'row', paddingTop: 8, paddingHorizontal: 8, borderTopWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#ffffff', alignItems: 'flex-end' },
   input: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, minHeight: 42, maxHeight: 100, backgroundColor: '#fff' },
 });

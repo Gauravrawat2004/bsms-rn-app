@@ -1,6 +1,6 @@
 /**
  * BSMS Backend — Updated Feb 2026
- * Fixed: ngrok headers, multipart handling, and safe JSON parsing
+ * Fixed: ngrok headers, multipart handling, safe JSON parsing, and CHAT DELETE ENDPOINT
  * Place at: X:\bsms-rn-app\server\server.js
  */
 
@@ -28,7 +28,6 @@ if (!supabase) {
 }
 
 /* ───────────────────────────── Middlewares ───────────────────────────── */
-/* ───────────────────────────── Middlewares ───────────────────────────── */
 const corsOptions = {
     origin: '*', 
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -37,7 +36,6 @@ const corsOptions = {
   };
 
 app.use(cors(corsOptions));
-// parse application/json bodies so req.body is populated
 app.use(express.json());
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
@@ -45,8 +43,8 @@ app.use((req, res, next) => {
   next();
 });
 
-/* ───────────────────────────── Local storage ───────────────────────────── */
-const DATA_DIR = path.join(__dirname, 'data');
+/* ───────────────────────────── Storage ───────────────────────────── */
+const DATA_DIR = process.env.VERCEL ? path.join(os.tmpdir(), 'bsms-data') : path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const BUSES_FILE = path.join(DATA_DIR, 'buses.json');
@@ -56,13 +54,93 @@ const CHAT_FILE = path.join(DATA_DIR, 'chat.json');
 const TICKETS_FILE = path.join(DATA_DIR, 'temp_tickets.json');
 const DEVICE_TOKENS_FILE = path.join(DATA_DIR, 'device_tokens.json');
 const PENDING_STUDENTS_FILE = path.join(DATA_DIR, 'pending_students.json');
+const STORE_TABLE = 'bsms_store';
+const STORE_KEYS = new Map([
+    [BUSES_FILE, 'buses'],
+    [STUDENTS_FILE, 'students'],
+    [FACULTIES_FILE, 'faculties'],
+    [CHAT_FILE, 'chat'],
+    [TICKETS_FILE, 'temp_tickets'],
+    [DEVICE_TOKENS_FILE, 'device_tokens'],
+    [PENDING_STUDENTS_FILE, 'pending_students'],
+]);
 
 [BUSES_FILE, STUDENTS_FILE, TICKETS_FILE, DEVICE_TOKENS_FILE, PENDING_STUDENTS_FILE].forEach((file) => {
     if (!fs.existsSync(file)) fs.writeFileSync(file, '[]');
 });
-// ensure faculty and chat files exist
-[ FACULTIES_FILE, CHAT_FILE ].forEach((file) => {
+[FACULTIES_FILE, CHAT_FILE].forEach((file) => {
     if (!fs.existsSync(file)) fs.writeFileSync(file, '[]');
+});
+
+let storeLoaded = !supabase;
+let storeLoadPromise = null;
+let pendingStoreWrites = [];
+
+async function loadStoreFromSupabase() {
+    if (!supabase || storeLoaded) return;
+    if (storeLoadPromise) return storeLoadPromise;
+
+    storeLoadPromise = (async () => {
+        const keys = [...STORE_KEYS.values()];
+        const { data, error } = await supabase
+            .from(STORE_TABLE)
+            .select('key,value')
+            .in('key', keys);
+
+        if (error) {
+            console.error('Failed to load Supabase store:', error.message);
+            return;
+        }
+
+        const rowsByKey = new Map((data || []).map((row) => [row.key, row.value]));
+        for (const [file, key] of STORE_KEYS.entries()) {
+            const value = rowsByKey.get(key) || [];
+            fs.writeFileSync(file, JSON.stringify(value, null, 2));
+        }
+
+        const missingRows = keys
+            .filter((key) => !rowsByKey.has(key))
+            .map((key) => ({ key, value: [] }));
+
+        if (missingRows.length > 0) {
+            await supabase.from(STORE_TABLE).upsert(missingRows, { onConflict: 'key' });
+        }
+
+        storeLoaded = true;
+    })();
+
+    return storeLoadPromise;
+}
+
+app.use(async (_req, _res, next) => {
+    try {
+        await loadStoreFromSupabase();
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
+
+async function flushStoreWrites() {
+    if (pendingStoreWrites.length === 0) return;
+    const writes = pendingStoreWrites;
+    pendingStoreWrites = [];
+    await Promise.allSettled(writes);
+}
+
+app.use((req, res, next) => {
+    const originalJson = res.json.bind(res);
+
+    res.json = function jsonWithStoreFlush(body) {
+        flushStoreWrites()
+            .catch((error) => {
+                console.error('Error flushing Supabase store writes:', error.message);
+            })
+            .finally(() => originalJson(body));
+        return res;
+    };
+
+    next();
 });
 
 /* ───────────────────────────── Helpers ───────────────────────────── */
@@ -86,6 +164,16 @@ function readJson(file) {
 
 function writeJson(file, data) {
     fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    const key = STORE_KEYS.get(file);
+    if (supabase && key) {
+        const writePromise = supabase
+            .from(STORE_TABLE)
+            .upsert({ key, value: data }, { onConflict: 'key' })
+            .then(({ error }) => {
+                if (error) console.error(`Error syncing ${key} to Supabase:`, error.message);
+            });
+        pendingStoreWrites.push(writePromise);
+    }
 }
 
 function todayISO() {
@@ -97,7 +185,6 @@ function purgeOldTickets() {
     const today = todayISO();
     let todays = all.filter((t) => t.date === today);
     
-    // Also filter out expired tickets based on trip_type
     todays = filterExpiredTickets(todays);
     
     if (todays.length !== all.length) writeJson(TICKETS_FILE, todays);
@@ -135,23 +222,19 @@ function getLocalIp() {
 /* ───────────────────────────── Push Notifications ───────────────────────────── */
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
-/**
- * Send push notifications to registered devices
- * @param {string[]} pushTokens - Array of Expo push tokens
- * @param {string} title - Notification title
- * @param {string} body - Notification body/message
- */
-async function sendPushNotifications(pushTokens, title, body) {
+async function sendPushNotifications(pushTokens, title, body, data = {}) {
     if (!pushTokens || pushTokens.length === 0) {
         console.log('No push tokens available, skipping push notification');
-        return;
+        return { sent: 0, skipped: true };
     }
 
-    const messages = pushTokens.map(token => ({
+    const uniqueTokens = [...new Set(pushTokens.filter(Boolean))];
+    const messages = uniqueTokens.map(token => ({
         to: token,
         sound: 'default',
         title: title,
         body: body,
+        data,
         badge: 1,
         priority: 'high',
     }));
@@ -166,17 +249,13 @@ async function sendPushNotifications(pushTokens, title, body) {
         });
 
         console.log('Push notifications sent successfully', response.data);
-        return response.data;
+        return { sent: messages.length, response: response.data };
     } catch (error) {
         console.error('Error sending push notifications:', error.message);
+        return { sent: 0, error: error.message };
     }
 }
 
-/**
- * Get all registered device tokens for a specific role
- * @param {string} role - 'conductor' or 'incharge'
- * @returns {string[]} Array of push tokens
- */
 function getDeviceTokensByRole(role) {
     const tokens = readJson(DEVICE_TOKENS_FILE);
     return tokens
@@ -184,16 +263,10 @@ function getDeviceTokensByRole(role) {
         .map((t) => t.token);
 }
 
-/**
- * Filter out expired tickets based on trip_type
- * - one_way: expires after 3 hours
- * - round_trip: expires after 12 hours
- */
 function filterExpiredTickets(tickets) {
     const now = new Date();
     return tickets.filter((ticket) => {
         if (!ticket.arrival_time) {
-            // If no arrival_time, consider it expired (shouldn't happen)
             return false;
         }
 
@@ -209,23 +282,20 @@ function filterExpiredTickets(tickets) {
     });
 }
 
-
 /* ───────────────────────────── Multer ───────────────────────────── */
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 function parseCsvBufferToRows(buffer) {
     let text = buffer.toString('utf-8');
-    // Remove BOM if present
     if (text.charCodeAt(0) === 0xFEFF) {
         text = text.slice(1);
     }
     console.log('CSV text sample:', text.substring(0, 200));
 
     try {
-        // First try with headers
         const rows = parseCsvSync(text, {
             columns: true,
             skip_empty_lines: true,
@@ -237,7 +307,6 @@ function parseCsvBufferToRows(buffer) {
     } catch (e) {
         console.log('Failed to parse with headers, trying without headers:', e.message);
         try {
-            // If that fails, try without headers
             const rows = parseCsvSync(text, {
                 skip_empty_lines: true,
                 relax_column_count: true,
@@ -259,11 +328,9 @@ function mapBusRow(row) {
     let bus_no, vehicle_no, driver, driver_contact, helper, helper_contact, route, time, capacity, conductor_id, conductor_name;
 
     if (Array.isArray(row)) {
-        // No headers - assume standard order
         [bus_no, vehicle_no, driver, driver_contact, helper, helper_contact, route, time, capacity, conductor_id, conductor_name] = row;
         console.log('Treating as array without headers');
     } else {
-        // With headers
         bus_no = row.bus_no ?? row['Bus No'] ?? row.busNo ?? row.Bus_No;
         vehicle_no = row.vehicle_no ?? row['Vehicle No'] ?? row.Vehicle_No;
         driver = row.driver ?? row.Driver;
@@ -316,7 +383,6 @@ function mapStudentRow(row, buses, existingById, seatsByBus) {
         bus = findBusByRoute(buses, route);
     }
 
-    // If no route match, try to assign to any available bus
     if (!bus) {
         console.log(`No bus found for route "${route}", trying to assign to any available bus`);
         for (const b of buses) {
@@ -445,7 +511,6 @@ app.post('/api/upload/student', upload.single('file'), handleStudentUpload);
 
 /* ───────────────────────────── Google Form Integration Endpoints ───────────────────────────── */
 
-// Get all pending student submissions
 app.get('/api/admin/pending-students', (req, res) => {
     try {
         const pendingStudents = readJson(PENDING_STUDENTS_FILE);
@@ -455,7 +520,6 @@ app.get('/api/admin/pending-students', (req, res) => {
     }
 });
 
-// Import student from Google Form (or manual JSON paste)
 app.post('/api/admin/import-from-form', (req, res) => {
     try {
         const { students } = req.body;
@@ -469,7 +533,6 @@ app.post('/api/admin/import-from-form', (req, res) => {
         const addedCount = students.filter((s) => {
             if (!s.student_id || !s.name) return false;
 
-            // Check if already pending or in official students
             const exists = pendingStudents.some((p) => p.student_id === s.student_id);
             const alreadyOfficial = readJson(STUDENTS_FILE).some((st) => st.student_id === s.student_id);
 
@@ -495,7 +558,6 @@ app.post('/api/admin/import-from-form', (req, res) => {
     }
 });
 
-// Approve a pending student (make official)
 app.post('/api/admin/approve-student', (req, res) => {
     try {
         const { pending_id } = req.body;
@@ -514,12 +576,10 @@ app.post('/api/admin/approve-student', (req, res) => {
         const pending = pendingStudents[pendingIndex];
         const students = readJson(STUDENTS_FILE);
 
-        // Check if student already exists
         if (students.some((s) => s.student_id === pending.student_id)) {
             return res.status(400).json({ error: 'Student already exists in official list' });
         }
 
-        // Add to official students
         const newStudent = {
             student_id: pending.student_id,
             name: pending.name,
@@ -535,7 +595,6 @@ app.post('/api/admin/approve-student', (req, res) => {
         students.push(newStudent);
         writeJson(STUDENTS_FILE, students);
 
-        // Remove from pending
         pendingStudents.splice(pendingIndex, 1);
         writeJson(PENDING_STUDENTS_FILE, pendingStudents);
 
@@ -545,7 +604,6 @@ app.post('/api/admin/approve-student', (req, res) => {
     }
 });
 
-// Reject a pending student
 app.post('/api/admin/reject-student', (req, res) => {
     try {
         const { pending_id } = req.body;
@@ -570,7 +628,6 @@ app.post('/api/admin/reject-student', (req, res) => {
     }
 });
 
-// Manually add a student (admin quick add)
 app.post('/api/admin/add-student-manual', (req, res) => {
     try {
         const { student_id, name, course, year, route } = req.body;
@@ -581,7 +638,6 @@ app.post('/api/admin/add-student-manual', (req, res) => {
 
         const students = readJson(STUDENTS_FILE);
 
-        // Check if student already exists
         if (students.some((s) => s.student_id === student_id)) {
             return res.status(400).json({ error: 'Student already exists' });
         }
@@ -643,7 +699,6 @@ const fetchStudent = async () => {
 
 /* ============================== MTO/STAFF ENDPOINTS ============================== */
 
-// Update driver for a bus
 app.post('/api/mto/driver', (req, res) => {
     try {
         const { bus_no, driver_name, driver_contact } = req.body;
@@ -676,7 +731,6 @@ app.post('/api/mto/driver', (req, res) => {
     }
 });
 
-// Update conductor for a bus
 app.post('/api/mto/conductor', (req, res) => {
     try {
         const { bus_no, conductor_id, conductor_name } = req.body;
@@ -713,7 +767,6 @@ app.post('/api/mto/conductor', (req, res) => {
 
 app.get('/api/buses', (req, res) => res.json(readJson(BUSES_FILE)));
 
-// Live status summary endpoint
 app.get('/summary', (req, res) => {
     try {
         const buses = readJson(BUSES_FILE);
@@ -742,7 +795,6 @@ app.get('/summary', (req, res) => {
     }
 });
 
-// Incharge summary endpoint (same as live status but with different route)
 app.get('/api/incharge/summary', (req, res) => {
     try {
         const buses = readJson(BUSES_FILE);
@@ -772,7 +824,7 @@ app.get('/api/incharge/summary', (req, res) => {
 });
 
 /* ───────────────────────────── Device Token Endpoints ───────────────────────────── */
-// Register device push token
+
 app.post('/api/device-token/register', (req, res) => {
     try {
         const { token, userId, role, device_name, os } = req.body;
@@ -787,17 +839,14 @@ app.post('/api/device-token/register', (req, res) => {
 
         let tokenData = readJson(DEVICE_TOKENS_FILE);
 
-        // Check if token already exists
         const existingToken = tokenData.find((t) => t.token === token);
         if (existingToken) {
-            // Update if exists
             existingToken.userId = userId;
             existingToken.role = role;
             existingToken.device_name = device_name;
             existingToken.os = os;
             existingToken.updated_at = new Date().toISOString();
         } else {
-            // Add new token
             tokenData.push({
                 token,
                 userId,
@@ -816,8 +865,7 @@ app.post('/api/device-token/register', (req, res) => {
     }
 });
 
-// Incharge alert endpoint
-app.post('/api/incharge/alert', (req, res) => {
+app.post('/api/incharge/alert', async (req, res) => {
     try {
         const { incharge_id, message } = req.body;
         if (!message) {
@@ -826,22 +874,23 @@ app.post('/api/incharge/alert', (req, res) => {
 
         console.log(`ALERT from ${incharge_id}: ${message}`);
 
-        // Send push notifications to all conductors and incharge
         const conductorTokens = getDeviceTokensByRole('conductor');
         const inchargeTokens = getDeviceTokensByRole('incharge');
         const allTokens = [...conductorTokens, ...inchargeTokens];
 
-        if (allTokens.length > 0) {
-            sendPushNotifications(allTokens, '🚨 Alert from Incharge', message);
-        }
+        const push = await sendPushNotifications(allTokens, '🚨 Alert from Incharge', message, {
+            type: 'alert',
+            source: 'incharge',
+            incharge_id: incharge_id || null,
+        });
 
-        res.json({ message: 'Alert sent successfully' });
+        res.json({ message: 'Alert sent successfully', push });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.post('/api/conductor/alert', (req, res) => {
+app.post('/api/conductor/alert', async (req, res) => {
     try {
         const { conductor_id, bus_no, message } = req.body;
         if (!message) {
@@ -850,16 +899,18 @@ app.post('/api/conductor/alert', (req, res) => {
 
         console.log(`CONDUCTOR ALERT from ${conductor_id || 'UNKNOWN'} on bus ${bus_no || 'N/A'}: ${message}`);
 
-        // Send push notifications to all conductors and incharge
         const conductorTokens = getDeviceTokensByRole('conductor');
         const inchargeTokens = getDeviceTokensByRole('incharge');
         const allTokens = [...conductorTokens, ...inchargeTokens];
 
-        if (allTokens.length > 0) {
-            sendPushNotifications(allTokens, `🚨 Alert from Bus ${bus_no || 'N/A'}`, message);
-        }
+        const push = await sendPushNotifications(allTokens, `🚨 Alert from Bus ${bus_no || 'N/A'}`, message, {
+            type: 'alert',
+            source: 'conductor',
+            conductor_id: conductor_id || null,
+            bus_no: bus_no || null,
+        });
 
-        res.json({ message: 'Alert sent successfully' });
+        res.json({ message: 'Alert sent successfully', push });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -867,13 +918,11 @@ app.post('/api/conductor/alert', (req, res) => {
 
 /* ============================== CONDUCTOR ENDPOINTS ============================== */
 
-// Get conductor assignment (bus_no for conductor_id)
 app.get('/api/conductor/:conductorId', (req, res) => {
     try {
         const { conductorId } = req.params;
         const buses = readJson(BUSES_FILE);
 
-        // Find bus assigned to this conductor
         const bus = buses.find(b => b.conductor_id === conductorId);
         if (!bus) {
             return res.status(404).json({ error: 'Conductor not assigned to any bus' });
@@ -885,7 +934,6 @@ app.get('/api/conductor/:conductorId', (req, res) => {
     }
 });
 
-// Update student attendance
 app.post('/api/conductor/attendance', (req, res) => {
     try {
         const { student_id, present, conductor_id } = req.body;
@@ -896,7 +944,6 @@ app.post('/api/conductor/attendance', (req, res) => {
         const students = readJson(STUDENTS_FILE);
         const tickets = readJson(TICKETS_FILE);
 
-        // Update in permanent students
         let updated = false;
         for (let i = 0; i < students.length; i++) {
             if (students[i].student_id === student_id) {
@@ -906,7 +953,6 @@ app.post('/api/conductor/attendance', (req, res) => {
             }
         }
 
-        // Update in temporary tickets
         if (!updated) {
             for (let i = 0; i < tickets.length; i++) {
                 if (tickets[i].student_id === student_id) {
@@ -930,7 +976,6 @@ app.post('/api/conductor/attendance', (req, res) => {
     }
 });
 
-// Add one-day ticket
 app.post('/api/conductor/ticket', (req, res) => {
     try {
         const { conductor_id, name, student_id, trip_type } = req.body;
@@ -949,7 +994,6 @@ app.post('/api/conductor/ticket', (req, res) => {
         }
 
         let tickets = readJson(TICKETS_FILE);
-        // Filter out expired tickets
         tickets = filterExpiredTickets(tickets);
         const seat = nextAvailableSeat(buses, readJson(STUDENTS_FILE), tickets, bus.bus_no);
 
@@ -977,7 +1021,6 @@ app.post('/api/conductor/ticket', (req, res) => {
     }
 });
 
-// Add permanent student
 app.post('/api/conductor/add-student', (req, res) => {
     try {
         const { conductor_id, name, student_id } = req.body;
@@ -994,7 +1037,6 @@ app.post('/api/conductor/add-student', (req, res) => {
         const students = readJson(STUDENTS_FILE);
         const tickets = readJson(TICKETS_FILE);
 
-        // Check if student already exists
         if (students.find(s => s.student_id === student_id)) {
             return res.status(400).json({ error: 'Student already exists' });
         }
@@ -1022,7 +1064,6 @@ app.post('/api/conductor/add-student', (req, res) => {
     }
 });
 
-// Remove ticket
 app.delete('/api/conductor/ticket/:studentId', (req, res) => {
     try {
         const { studentId } = req.params;
@@ -1042,11 +1083,8 @@ app.delete('/api/conductor/ticket/:studentId', (req, res) => {
     }
 });
 
-/* ============================== ADJUSTMENT ENDPOINTS ============================== */
-
 /* ============================== FACULTY MANAGEMENT ============================== */
 
-// Create new faculty record
 app.post('/api/mto/faculty', (req, res) => {
     try {
         const { name, phone, department, bus_no } = req.body;
@@ -1070,14 +1108,12 @@ app.post('/api/mto/faculty', (req, res) => {
     }
 });
 
-// Faculty route-change request (mobile app sends POST with faculty_id)
 app.post('/api/faculty/request-route-change', (req, res) => {
     try {
         const { faculty_id } = req.body;
         if (!faculty_id) {
             return res.status(400).json({ error: 'faculty_id required' });
         }
-        // For now simply log the request. Could be stored or notified later.
         console.log(`Faculty ${faculty_id} requested route change.`);
         res.json({ message: 'request received', faculty_id });
     } catch (err) {
@@ -1085,7 +1121,6 @@ app.post('/api/faculty/request-route-change', (req, res) => {
     }
 });
 
-// List all faculties
 app.get('/api/mto/faculties', (req, res) => {
     try {
         res.json(readJson(FACULTIES_FILE));
@@ -1165,7 +1200,7 @@ app.post('/api/mto/faculty/delete', deleteFacultyRecord);
 
 /* ============================== CHAT ENDPOINTS ============================== */
 
-// send chat message
+// Send chat message
 app.post('/api/chat/send', (req, res) => {
     try {
         const { role, user_id, name, message } = req.body;
@@ -1182,23 +1217,188 @@ app.post('/api/chat/send', (req, res) => {
     }
 });
 
-// get chat messages optionally since timestamp
+// Get chat messages
 app.get('/api/chat/messages', (req, res) => {
     try {
         const since = req.query.since;
+        const userId = req.query.user_id;
+        
         let chats = readJson(CHAT_FILE);
+        
         if (since) {
             chats = chats.filter(c => c.ts > since);
         }
+        
+        if (userId) {
+            chats = chats.filter(msg => {
+                if (msg.deleted_for_everyone) {
+                    return true;
+                }
+                if (msg.deleted_by && Array.isArray(msg.deleted_by) && msg.deleted_by.includes(userId)) {
+                    return false;
+                }
+                return true;
+            });
+        }
+        
         res.json(chats);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
+// ✅ DELETE MESSAGE - FIXED ENDPOINT (matches frontend call)
+app.delete('/api/chat/messages/:user_id/:ts', (req, res) => {
+    try {
+        const { user_id, ts } = req.params;
+        
+        // Get requesting user from query or body
+        const requestingUserId = req.query.requesting_user_id || req.body.requesting_user_id;
+        
+        if (!requestingUserId) {
+            return res.status(400).json({ error: 'requesting_user_id required' });
+        }
+        
+        // Decode timestamp
+        const decodedTs = decodeURIComponent(ts);
+        
+        console.log(`🗑️  Delete attempt: user_id=${user_id}, ts=${decodedTs}, requesting=${requestingUserId}`);
+        
+        const chats = readJson(CHAT_FILE);
+        
+        // Find the message
+        const messageIndex = chats.findIndex(
+            m => m.user_id === user_id && m.ts === decodedTs
+        );
+        
+        if (messageIndex === -1) {
+            console.log(`❌ Message not found: user_id=${user_id}, ts=${decodedTs}`);
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        
+        const message = chats[messageIndex];
+        
+        // Verify the requesting user owns this message
+        if (message.user_id !== requestingUserId) {
+            console.log(`❌ Unauthorized: message owner=${message.user_id}, requester=${requestingUserId}`);
+            return res.status(403).json({ 
+                error: 'You can only delete your own messages'
+            });
+        }
+        
+        // Delete the message
+        chats.splice(messageIndex, 1);
+        writeJson(CHAT_FILE, chats);
+        
+        console.log(`✅ Message deleted successfully: user_id=${user_id}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Message deleted successfully'
+        });
+        
+    } catch (err) {
+        console.error('❌ Delete error:', err);
+        res.status(500).json({ error: `Failed to delete message: ${err.message}` });
+    }
+});
+
+// Legacy endpoint - delete for me only
+app.delete('/api/chat/messages/delete/:userId/:timestamp', (req, res) => {
+    try {
+        const { userId, timestamp } = req.params;
+        const requestingUserId = req.query.requesting_user_id || req.body.requesting_user_id;
+        
+        if (!requestingUserId) {
+            return res.status(400).json({ error: 'requesting_user_id required' });
+        }
+        
+        const chats = readJson(CHAT_FILE);
+        const decodedTimestamp = decodeURIComponent(timestamp);
+        
+        const messageIndex = chats.findIndex(
+            m => m.user_id === userId && m.ts === decodedTimestamp
+        );
+        
+        if (messageIndex === -1) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        
+        const message = chats[messageIndex];
+        
+        if (message.user_id !== requestingUserId) {
+            return res.status(403).json({ error: 'Cannot delete other users\' messages' });
+        }
+        
+        if (!message.deleted_by) {
+            message.deleted_by = [];
+        }
+        if (!message.deleted_by.includes(requestingUserId)) {
+            message.deleted_by.push(requestingUserId);
+        }
+        
+        chats[messageIndex] = message;
+        writeJson(CHAT_FILE, chats);
+        
+        res.json({ 
+            success: true, 
+            message: 'Message deleted for you',
+            deletedBy: message.deleted_by
+        });
+    } catch (err) {
+        console.error('Delete error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Legacy endpoint - delete for all
+app.delete('/api/chat/messages/delete-all/:userId/:timestamp', (req, res) => {
+    try {
+        const { userId, timestamp } = req.params;
+        const requestingUserId = req.query.requesting_user_id || req.body.requesting_user_id;
+        
+        if (!requestingUserId) {
+            return res.status(400).json({ error: 'requesting_user_id required' });
+        }
+        
+        const chats = readJson(CHAT_FILE);
+        const decodedTimestamp = decodeURIComponent(timestamp);
+        
+        const messageIndex = chats.findIndex(
+            m => m.user_id === userId && m.ts === decodedTimestamp
+        );
+        
+        if (messageIndex === -1) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        
+        const message = chats[messageIndex];
+        
+        if (message.user_id !== requestingUserId) {
+            return res.status(403).json({ error: 'Cannot delete other users\' messages' });
+        }
+        
+        message.deleted_for_everyone = true;
+        message.deleted_at = new Date().toISOString();
+        message.deleted_by_user = requestingUserId;
+        message.message = '';
+        
+        chats[messageIndex] = message;
+        writeJson(CHAT_FILE, chats);
+        
+        res.json({ 
+            success: true, 
+            message: 'Message deleted for everyone',
+            deletedAt: message.deleted_at
+        });
+    } catch (err) {
+        console.error('Delete all error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 /* ============================== ADJUSTMENT ENDPOINTS ============================== */
 
-// Adjust buses for off-day (consolidate routes)
 app.post('/adjust-offday', (req, res) => {
     try {
         const { date, routes, off, apply } = req.body;
@@ -1214,14 +1414,12 @@ app.post('/adjust-offday', (req, res) => {
 
         console.log(`Processing ${routes.length} routes, ${buses.length} buses, ${students.length} students`);
 
-        // Filter buses by selected routes
         const routeBuses = buses.filter(bus => routes.some(route =>
             normalizeRoute(bus.route) === normalizeRoute(route)
         ));
 
         console.log(`Found ${routeBuses.length} buses matching routes`);
 
-        // Mock adjustment logic - in real app this would be more complex
         const plans = routes.map(route => {
             try {
                 const routeBusesForRoute = routeBuses.filter(bus =>
@@ -1240,7 +1438,6 @@ app.post('/adjust-offday', (req, res) => {
                     };
                 }
 
-                // Keep the bus with most capacity
                 const sortedBuses = routeBusesForRoute.sort((a, b) => (b.capacity || 36) - (a.capacity || 36));
                 const keepBus = sortedBuses[0];
                 const suspendBuses = sortedBuses.slice(1);
@@ -1284,7 +1481,6 @@ app.post('/adjust-offday', (req, res) => {
 
 /* ───────────────────────────── Student Routes ───────────────────────────── */
 
-// 1. Get ALL students (or filtered by bus_no)
 app.get('/api/students', (req, res) => {
     try {
         const busNo = req.query.bus_no ? parseInt(req.query.bus_no, 10) : null;
@@ -1311,17 +1507,14 @@ app.get('/api/students', (req, res) => {
     }
 });
 
-// 2. Get a SINGLE student by ID (Fixes the "Unexpected token <" error)
 app.get('/api/student/:id', (req, res) => {
     try {
         const { id } = req.params;
         const students = readJson(STUDENTS_FILE);
         
-        // Find in permanent students or temporary tickets
         const student = students.find(s => s.student_id === id);
         
         if (!student) {
-            // Check tickets if not in main list
             const tickets = readJson(TICKETS_FILE);
             const ticketStudent = tickets.find(t => t.student_id === id);
             

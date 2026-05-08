@@ -1,17 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
     FlatList,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_BASE } from '../config/api';
 
 type PendingStudent = {
@@ -24,30 +24,13 @@ type PendingStudent = {
   submitted_at?: string;
 };
 
-type Student = {
-  student_id: string;
-  name: string;
-  course?: string;
-  year?: string;
-  route?: string;
-  bus_no?: number;
-};
-
 export default function DataManagement() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'pending' | 'manual'>('pending');
+  const [activeTab, setActiveTab] = useState<'csv' | 'pending'>('csv');
   const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
-  const [manualMode, setManualMode] = useState(false);
-
-  // Manual entry form
-  const [formData, setFormData] = useState({
-    student_id: '',
-    name: '',
-    course: '',
-    year: '',
-    route: '',
-  });
+  const [uploadingBus, setUploadingBus] = useState(false);
+  const [uploadingStudents, setUploadingStudents] = useState(false);
 
   const loadPendingStudents = async () => {
     setLoadingPending(true);
@@ -112,29 +95,54 @@ export default function DataManagement() {
     }
   };
 
-  const addManualStudent = async () => {
-    if (!formData.student_id.trim() || !formData.name.trim()) {
-      Alert.alert('Missing data', 'Student ID and Name are required');
-      return;
-    }
+  const uploadCsv = async (kind: 'bus' | 'student') => {
+    const setUploading = kind === 'bus' ? setUploadingBus : setUploadingStudents;
+    const label = kind === 'bus' ? 'Bus' : 'Student';
 
     try {
-      const resp = await fetch(`${API_BASE}/api/admin/add-student-manual`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'application/csv', 'text/comma-separated-values', 'application/vnd.ms-excel'],
+        copyToCacheDirectory: true,
       });
 
-      if (!resp.ok) {
-        const error = await resp.json();
-        throw new Error(error.error || 'Failed to add student');
+      if (result.canceled) return;
+
+      const file = result.assets[0];
+      if (!file?.uri) {
+        Alert.alert('Upload error', 'No CSV file selected.');
+        return;
       }
 
-      Alert.alert('Success', 'Student added successfully');
-      setFormData({ student_id: '', name: '', course: '', year: '', route: '' });
-      setManualMode(false);
+      setUploading(true);
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        name: file.name || `${kind}.csv`,
+        type: file.mimeType || 'text/csv',
+      } as any);
+
+      const resp = await fetch(`${API_BASE}/api/upload/${kind}`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+      const text = await resp.text();
+      const data = text ? JSON.parse(text) : {};
+
+      if (!resp.ok) {
+        throw new Error(data?.error || `${label} CSV upload failed`);
+      }
+
+      const count = data?.count ?? data?.added;
+      Alert.alert('Upload complete', `${label} CSV uploaded successfully${count != null ? ` (${count} records)` : ''}.`);
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to add student');
+      console.warn(`${label} CSV upload failed:`, e?.message);
+      Alert.alert('Upload error', e?.message || `${label} CSV upload failed.`);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -153,11 +161,11 @@ export default function DataManagement() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'manual' && styles.tabActive]}
-          onPress={() => setActiveTab('manual')}
+          style={[styles.tab, activeTab === 'csv' && styles.tabActive]}
+          onPress={() => setActiveTab('csv')}
         >
-          <Text style={[styles.tabText, activeTab === 'manual' && styles.tabTextActive]}>
-            Manual Entry
+          <Text style={[styles.tabText, activeTab === 'csv' && styles.tabTextActive]}>
+            CSV Upload
           </Text>
         </TouchableOpacity>
       </View>
@@ -227,83 +235,48 @@ export default function DataManagement() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
-          {!manualMode ? (
-            <>
-              <View style={styles.infoCard}>
-                <Ionicons name="information-circle-outline" size={20} color="#0a67d3" />
-                <Text style={styles.infoText}>
-                  Use this form to manually add students for urgent cases.
-                </Text>
-              </View>
+          <View style={styles.infoCard}>
+            <Ionicons name="information-circle-outline" size={20} color="#0a67d3" />
+            <Text style={styles.infoText}>
+              Upload bus CSV first, then upload student CSV so routes, assignments, and seats can be generated correctly.
+            </Text>
+          </View>
 
-              <TouchableOpacity
-                style={[styles.btn, styles.btnPrimary, { marginBottom: 20 }]}
-                onPress={() => setManualMode(true)}
-              >
-                <Ionicons name="add-circle-outline" size={18} color="#ffffff" />
-                <Text style={styles.btnText}>Add New Student</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Add Student Manually</Text>
-
-              <Text style={styles.fieldLabel}>Student ID *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., ST001"
-                value={formData.student_id}
-                onChangeText={(text) => setFormData({ ...formData, student_id: text })}
-              />
-
-              <Text style={styles.fieldLabel}>Name *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name"
-                value={formData.name}
-                onChangeText={(text) => setFormData({ ...formData, name: text })}
-              />
-
-              <Text style={styles.fieldLabel}>Course</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., B.Tech"
-                value={formData.course}
-                onChangeText={(text) => setFormData({ ...formData, course: text })}
-              />
-
-              <Text style={styles.fieldLabel}>Year</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., 1"
-                value={formData.year}
-                onChangeText={(text) => setFormData({ ...formData, year: text })}
-              />
-
-              <Text style={styles.fieldLabel}>Route</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., Bhimtal"
-                value={formData.route}
-                onChangeText={(text) => setFormData({ ...formData, route: text })}
-              />
-
-              <View style={styles.formActions}>
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnCancel]}
-                  onPress={() => setManualMode(false)}
-                >
-                  <Text style={styles.btnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnPrimary]}
-                  onPress={addManualStudent}
-                >
-                  <Text style={styles.btnText}>Add Student</Text>
-                </TouchableOpacity>
+          <View style={styles.card}>
+            <View style={styles.uploadHeader}>
+              <Ionicons name="bus-outline" size={24} color="#0a67d3" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Bus CSV</Text>
+                <Text style={styles.fieldValue}>Expected columns include Bus No, Vehicle No, Driver, Helper, Route, Capacity, Conductor ID.</Text>
               </View>
             </View>
-          )}
+            <TouchableOpacity
+              style={[styles.btn, styles.btnPrimary, uploadingBus && styles.btnDisabled]}
+              onPress={() => uploadCsv('bus')}
+              disabled={uploadingBus}
+            >
+              <Ionicons name="cloud-upload-outline" size={18} color="#ffffff" />
+              <Text style={styles.btnText}>{uploadingBus ? 'Uploading Bus CSV...' : 'Upload Bus CSV'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.uploadHeader}>
+              <Ionicons name="people-outline" size={24} color="#0a67d3" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Student CSV</Text>
+                <Text style={styles.fieldValue}>Expected columns include Student ID, Name, Course, Year, Route, and Fee Paid.</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.btn, styles.btnPrimary, uploadingStudents && styles.btnDisabled]}
+              onPress={() => uploadCsv('student')}
+              disabled={uploadingStudents}
+            >
+              <Ionicons name="cloud-upload-outline" size={18} color="#ffffff" />
+              <Text style={styles.btnText}>{uploadingStudents ? 'Uploading Student CSV...' : 'Upload Student CSV'}</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       )}
     </SafeAreaView>
@@ -360,6 +333,7 @@ const styles = StyleSheet.create({
   },
   cardContent: { flexDirection: 'row', justifyContent: 'space-between' },
   cardTitle: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 12 },
+  uploadHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   fieldLabel: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
   fieldValue: { fontSize: 13, color: '#111827', marginTop: 2 },
 
@@ -369,6 +343,7 @@ const styles = StyleSheet.create({
     borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
   },
   btnPrimary: { backgroundColor: '#0a67d3', flex: 1, justifyContent: 'center' },
+  btnDisabled: { opacity: 0.65 },
   btnApprove: { backgroundColor: '#10b981', flex: 1, justifyContent: 'center' },
   btnReject: { backgroundColor: '#ef4444', flex: 1, justifyContent: 'center' },
   btnCancel: { backgroundColor: '#e5e7eb', flex: 1, justifyContent: 'center' },

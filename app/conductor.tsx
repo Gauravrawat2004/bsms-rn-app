@@ -1,6 +1,6 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import {
     ActivityIndicator,
@@ -14,13 +14,11 @@ import {
     TextInput,
 } from 'react-native-paper';
 import { API_BASE } from './config/api';
+import * as Notifications from 'expo-notifications';
 import {
-    configureNotifications,
     getDevicePushToken,
-    onNotificationReceived,
     registerDeviceToken,
-    requestNotificationPermissions,
-} from './utils/push-notifications';
+} from './utils/Notification';
 
 type Student = {
   student_id: string;
@@ -73,7 +71,7 @@ export default function ConductorScreen() {
   const [ticketMode, setTicketMode] = useState<boolean>(true); // true = one-day
   const [tripType, setTripType] = useState<'one_way' | 'round_trip'>('one_way');
 
-  async function resolveBus() {
+  const resolveBus = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/conductor/${encodeURIComponent(conductorId)}`);
       if (res.ok) {
@@ -89,9 +87,9 @@ export default function ConductorScreen() {
     const fallbackBus = map[conductorId] ?? null;
     setBusNo(fallbackBus);
     return fallbackBus;
-  }
+  }, [conductorId]);
 
-  async function loadStudents(bus: number | null) {
+  const loadStudents = useCallback(async (bus: number | null) => {
     if (!bus) return;
     try {
       setLoading(true);
@@ -113,48 +111,47 @@ export default function ConductorScreen() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     (async () => {
       const bus = await resolveBus();
       await loadStudents(bus);
     })();
-  }, [conductorId]);
+  }, [loadStudents, resolveBus]);
 
   // Register device for push notifications
   useEffect(() => {
-    (async () => {
-      try {
-        configureNotifications();
-        const hasPermission = await requestNotificationPermissions();
-        if (!hasPermission) {
-          console.warn('Notification permissions not granted');
-          return;
-        }
+    let subscription: Notifications.Subscription | undefined;
+    let cancelled = false;
 
+    async function setupPushNotifications() {
+      try {
         const token = await getDevicePushToken();
-        if (token) {
+        if (token && !cancelled) {
           const success = await registerDeviceToken(token, conductorId, 'conductor', API_BASE);
           if (success) {
             console.log('Device registered for push notifications');
           }
         }
 
-        // Listen for incoming notifications
-        const subscription = onNotificationReceived((notification) => {
-          console.log('Notification received:', notification);
+        subscription = Notifications.addNotificationReceivedListener((notification) => {
           Alert.alert(
             notification.request.content.title || 'Notification',
             notification.request.content.body || 'You have a new message'
           );
         });
-
-        return () => subscription.remove();
       } catch (error) {
         console.error('Error setting up push notifications:', error);
       }
-    })();
+    }
+
+    setupPushNotifications();
+
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+    };
   }, [conductorId]);
 
   async function markAttendance(student_id: string, present: boolean) {
@@ -460,6 +457,24 @@ export default function ConductorScreen() {
                 </View>
                 <Button mode="contained" onPress={addPassenger}>जोड़ें</Button>
               </View>
+              {ticketMode ? (
+                <View style={styles.tripTypeRow}>
+                  <Button
+                    mode={tripType === 'one_way' ? 'contained-tonal' : 'outlined'}
+                    compact
+                    onPress={() => setTripType('one_way')}
+                  >
+                    एक तरफ
+                  </Button>
+                  <Button
+                    mode={tripType === 'round_trip' ? 'contained-tonal' : 'outlined'}
+                    compact
+                    onPress={() => setTripType('round_trip')}
+                  >
+                    आना-जाना
+                  </Button>
+                </View>
+              ) : null}
 
               <Divider style={{ marginVertical: 12 }} />
 
@@ -536,6 +551,7 @@ const styles = StyleSheet.create({
   flexField: { flex: 1 },
   addRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   addRow2: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 8, justifyContent: 'space-between' },
+  tripTypeRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
   tabRow: { flexDirection: 'row', gap: 10 },
   tabPanel: { marginTop: 12 },
   alertRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },

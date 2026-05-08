@@ -1,25 +1,24 @@
 
 // app/incharge.tsx
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import {
-    ActivityIndicator,
-    Button,
-    Card,
-    Chip,
-    Divider,
-    Text,
-    TextInput,
+  ActivityIndicator,
+  Button,
+  Card,
+  Chip,
+  Divider,
+  Text,
+  TextInput,
 } from 'react-native-paper';
 import { API_BASE } from './config/api';
 import {
-    configureNotifications,
-    getDevicePushToken,
-    onNotificationReceived,
-    registerDeviceToken,
-    requestNotificationPermissions,
-} from './utils/push-notifications';
+  getDevicePushToken,
+  registerDeviceToken,
+  usePushNotifications,
+} from './utils/Notification';
 
 type BusSummary = {
   bus_no: number;
@@ -40,6 +39,17 @@ export default function InchargeScreen() {
   const [routeFilter, setRouteFilter] = useState<string>('');
   const [alertMsg, setAlertMsg] = useState<string>('');
   const [alertInfo, setAlertInfo] = useState<string>('');
+  const router = useRouter();
+
+  usePushNotifications(
+    undefined,
+    (notification: Notifications.Notification) => {
+      Alert.alert(
+        notification.request.content.title || 'Alert',
+        notification.request.content.body || ''
+      );
+    }
+  );
 
   async function loadSummary() {
     try {
@@ -54,45 +64,28 @@ export default function InchargeScreen() {
     }
   }
 
-  const router = useRouter();
-
   useEffect(() => {
     loadSummary();
   }, []);
 
   // Register device for push notifications
   useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
-        configureNotifications();
-        const hasPermission = await requestNotificationPermissions();
-        if (!hasPermission) {
-          console.warn('Notification permissions not granted');
-          return;
-        }
-
         const token = await getDevicePushToken();
-        if (token) {
-          const success = await registerDeviceToken(token, inchargeId, 'incharge', API_BASE);
-          if (success) {
-            console.log('Device registered for push notifications');
-          }
+        if (token && !cancelled) {
+          await registerDeviceToken(token, inchargeId || 'INCHARGE', 'incharge', API_BASE);
         }
-
-        // Listen for incoming notifications
-        const subscription = onNotificationReceived((notification) => {
-          console.log('Notification received:', notification);
-          Alert.alert(
-            notification.request.content.title || 'Notification',
-            notification.request.content.body || 'You have a new message'
-          );
-        });
-
-        return () => subscription.remove();
-      } catch (error) {
-        console.error('Error setting up push notifications:', error);
+      } catch (e) {
+        console.warn('Push notification registration failed:', e);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [inchargeId]);
 
   const onRefresh = async () => {
