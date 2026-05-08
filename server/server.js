@@ -1555,6 +1555,17 @@ app.get('/api/student/:id', (req, res) => {
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 
+app.get('/debug/env', (req, res) => {
+    res.json({
+        supabaseUrlConfigured: !!process.env.SUPABASE_URL,
+        supabaseServiceRoleConfigured: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        supabaseServiceRoleLooksAnon: String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').includes('"role":"anon"'),
+        dataDir: DATA_DIR,
+        nodeVersion: process.version,
+        vercel: !!process.env.VERCEL,
+    });
+});
+
 app.get('/', (req, res) => {
     res.send('<h2>BSMS Backend is Running</h2>');
 });

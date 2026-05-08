@@ -1,11 +1,18 @@
 {
   "version": 2,
   "functions": {
+    "api/health.js": {
+      "maxDuration": 10
+    },
     "api/index.js": {
       "maxDuration": 30
     }
   },
   "routes": [
+    {
+      "src": "/health",
+      "dest": "/api/health.js"
+    },
     {
       "src": "/favicon.ico",
       "status": 204
